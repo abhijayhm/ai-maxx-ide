@@ -8,7 +8,7 @@ from config.asgi import application
 @pytest.mark.asyncio
 async def test_agent_ws_auth_and_message(api_key, registered_device, workspace, device_hash):
     url = (
-        f"/ws/agent/?api_key={api_key}&device_hash={device_hash}&workspace_id={workspace.id}"
+        f"/api/ws/agent/?api_key={api_key}&device_hash={device_hash}&workspace_id={workspace.id}"
     )
     communicator = WebsocketCommunicator(application, url)
     connected, _ = await communicator.connect()
@@ -29,7 +29,7 @@ async def test_agent_ws_auth_and_message(api_key, registered_device, workspace, 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_agent_ws_auth_frame(api_key, registered_device, workspace, device_hash):
-    communicator = WebsocketCommunicator(application, "/ws/agent/")
+    communicator = WebsocketCommunicator(application, "/api/ws/agent/")
     connected, _ = await communicator.connect()
     assert connected
 

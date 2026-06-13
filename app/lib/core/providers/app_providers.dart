@@ -53,9 +53,39 @@ final authRepositoryProvider = FutureProvider<AuthRepository>((ref) async {
 class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
   @override
   Future<SessionSnapshot> build() async {
-    final snapshot = await _loadSessionSnapshot();
+    var snapshot = await _loadSessionSnapshot();
+    if (!snapshot.isRegistered && snapshot.apiKey.isNotEmpty) {
+      snapshot = await _tryAutoRegister(snapshot);
+    }
     _kickoffBackgroundSync(snapshot);
     return snapshot;
+  }
+
+  Future<SessionSnapshot> _tryAutoRegister(SessionSnapshot snapshot) async {
+    try {
+      final database = await ref.read(appDatabaseProvider.future);
+      final config = ref.read(appConfigProvider);
+      config.apiKey = snapshot.apiKey;
+      config.serverUrl = snapshot.serverUrl;
+      final deviceIdentifier = ref.read(deviceIdentifierProvider);
+      final apiClient = ApiClient(
+        config: config,
+        readHeaders: () => (
+          apiKey: snapshot.apiKey,
+          deviceHash: snapshot.deviceHash,
+          workspaceId: snapshot.activeWorkspaceId,
+        ),
+      );
+      final auth = AuthRepository(
+        apiClient: apiClient,
+        database: database,
+        deviceIdentifier: deviceIdentifier,
+        config: config,
+      );
+      return await auth.registerDevice(snapshot.apiKey);
+    } catch (_) {
+      return snapshot;
+    }
   }
 
   /// Loads session from local storage without depending on [authRepositoryProvider].

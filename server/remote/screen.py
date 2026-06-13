@@ -1,4 +1,13 @@
-"""Screen capture track — stub when aiortc unavailable."""
+"""Screen capture track via mss + aiortc."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import queue
+import threading
+
+logger = logging.getLogger(__name__)
 
 try:
     from aiortc.contrib.media import MediaRelay
@@ -7,8 +16,8 @@ try:
     AIORTC_AVAILABLE = True
 except ImportError:
     AIORTC_AVAILABLE = False
-    MediaRelay = None
-    VideoStreamTrack = object
+    MediaRelay = None  # type: ignore[misc, assignment]
+    VideoStreamTrack = object  # type: ignore[misc, assignment]
 
 
 class StubScreenTrack:
@@ -17,34 +26,34 @@ class StubScreenTrack:
     kind = "video"
 
     async def recv(self):
-        import asyncio
-
         await asyncio.sleep(0.033)
         return None
+
+    def stop(self) -> None:
+        pass
 
 
 if AIORTC_AVAILABLE:
 
-    import asyncio
-    import threading
-
     import numpy as np
 
     class ScreenTrack(VideoStreamTrack):
-        """mss capture thread → queue(maxsize=1) → recv() → VideoFrame"""
+        """mss capture thread → queue(maxsize=1) → recv() → VideoFrame."""
+
+        kind = "video"
 
         def __init__(self):
             super().__init__()
-            self._queue: asyncio.Queue = asyncio.Queue(maxsize=1)
-            self._thread = threading.Thread(target=self._capture_loop, daemon=True)
+            self._queue: queue.Queue = queue.Queue(maxsize=1)
             self._running = True
+            self._thread = threading.Thread(target=self._capture_loop, daemon=True)
             self._thread.start()
 
-        def _capture_loop(self):
+        def _capture_loop(self) -> None:
             try:
-                import av
                 import mss
             except ImportError:
+                logger.warning("mss not installed — screen capture disabled")
                 return
 
             with mss.mss() as sct:
@@ -58,27 +67,28 @@ if AIORTC_AVAILABLE:
                     frame = frame[:h8, :w8]
                     try:
                         self._queue.put_nowait(frame)
-                    except asyncio.QueueFull:
-                        pass
+                    except queue.Full:
+                        try:
+                            self._queue.get_nowait()
+                        except queue.Empty:
+                            pass
+                        try:
+                            self._queue.put_nowait(frame)
+                        except queue.Full:
+                            pass
 
         async def recv(self):
             from av import VideoFrame
 
-            frame = await self._queue.get()
+            loop = asyncio.get_running_loop()
+            frame = await loop.run_in_executor(None, self._queue.get)
             video_frame = VideoFrame.from_ndarray(frame, format="rgb24")
             video_frame.pts, video_frame.time_base = await self.next_timestamp()
             return video_frame
 
-        def stop(self):
+        def stop(self) -> None:
             self._running = False
 
-else:
-    ScreenTrack = StubScreenTrack
-
-    def get_media_relay():
-        return None
-
-if AIORTC_AVAILABLE:
     _relay = MediaRelay()
 
     def get_media_relay():
@@ -88,6 +98,10 @@ if AIORTC_AVAILABLE:
         return ScreenTrack()
 
 else:
+    ScreenTrack = StubScreenTrack  # type: ignore[misc, assignment]
+
+    def get_media_relay():
+        return None
 
     def create_screen_track():
         return StubScreenTrack()

@@ -4,13 +4,21 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 
 from core.models import DeviceIdentifier
 from remote.input_executor import clear_staging, execute_batch, get_staging
+from remote.webrtc import add_ice_candidate, close_peer, handle_offer
 
 
 class RemoteConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.authenticated = self.scope.get("ws_authenticated", False)
         self.device = self.scope.get("device")
+        self.pc = None
+        self._screen_track = None
         await self.accept()
+
+    async def disconnect(self, close_code):
+        await close_peer(self.pc, self._screen_track)
+        self.pc = None
+        self._screen_track = None
 
     async def receive(self, text_data=None, bytes_data=None):
         if text_data is None:
@@ -67,16 +75,13 @@ class RemoteConsumer(AsyncWebsocketConsumer):
     async def _handle_signaling(self, content):
         msg_type = content.get("type")
         if msg_type == "offer":
-            await self.send_json(
-                {
-                    "type": "answer",
-                    "sdp": content.get("sdp", ""),
-                    "stub": True,
-                }
+            await close_peer(self.pc, self._screen_track)
+            self.pc, self._screen_track = await handle_offer(
+                self.send_json,
+                content.get("sdp", ""),
             )
-            await self.send_json({"type": "connected"})
         elif msg_type == "ice_candidate":
-            await self.send_json({"type": "ice_candidate", "candidate": content.get("candidate")})
+            await add_ice_candidate(self.pc, content)
 
     async def _handle_input_batch(self, content):
         events = content.get("events", [])

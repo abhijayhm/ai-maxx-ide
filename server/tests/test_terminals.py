@@ -73,7 +73,7 @@ def test_close_stale_terminals(registered_device, workspace):
 @pytest.mark.asyncio
 async def test_terminal_ws_attach(api_key, registered_device, workspace, device_hash, terminal):
     url = (
-        f"/ws/terminals/{terminal.id}/?"
+        f"/api/ws/terminals/{terminal.id}/?"
         f"api_key={api_key}&device_hash={device_hash}&workspace_id={workspace.id}"
     )
     communicator = WebsocketCommunicator(application, url)
@@ -93,7 +93,7 @@ async def test_terminal_ws_closed_after_idle(
     api_key, registered_device, workspace, device_hash, closed_terminal
 ):
     url = (
-        f"/ws/terminals/{closed_terminal.id}/?"
+        f"/api/ws/terminals/{closed_terminal.id}/?"
         f"api_key={api_key}&device_hash={device_hash}&workspace_id={workspace.id}"
     )
     communicator = WebsocketCommunicator(application, url)

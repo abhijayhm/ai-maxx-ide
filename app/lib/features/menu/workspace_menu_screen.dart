@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_repository.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/providers/files_provider.dart';
 import '../../theme/workbench_colors.dart';
 import '../../theme/workbench_theme.dart';
 import '../onboarding/auth_modal.dart';
@@ -110,6 +111,109 @@ class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
 
   bool _isDescendant(String candidate, String parent) {
     return candidate.startsWith('$parent/') || candidate.startsWith('$parent\\');
+  }
+
+  Future<void> _createFolder() async {
+    final parent = _selectedPath;
+    if (parent == null || parent.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a parent folder first.')),
+      );
+      return;
+    }
+    final name = await _promptName(context, 'New folder name');
+    if (name == null || name.isEmpty) {
+      return;
+    }
+    setState(() => _opening = true);
+    try {
+      final repo = await ref.read(filesRepositoryProvider.future);
+      await repo.mkdir(parent, name);
+      await _expandDirectory(parent, _depthForPath(parent));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Created folder $name')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _opening = false);
+      }
+    }
+  }
+
+  Future<void> _createFile() async {
+    final parent = _selectedPath;
+    if (parent == null || parent.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a parent folder first.')),
+      );
+      return;
+    }
+    final name = await _promptName(context, 'New file name');
+    if (name == null || name.isEmpty) {
+      return;
+    }
+    setState(() => _opening = true);
+    try {
+      final repo = await ref.read(filesRepositoryProvider.future);
+      await repo.touch(parent, name);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Created file $name')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _opening = false);
+      }
+    }
+  }
+
+  int _depthForPath(String path) {
+    for (final entry in _treeEntries) {
+      if (entry.path == path) {
+        return entry.depth;
+      }
+    }
+    return 0;
+  }
+
+  Future<String?> _promptName(BuildContext context, String title) async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _openWorkspace() async {
@@ -264,15 +368,39 @@ class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: !authenticated || _opening ? null : _openWorkspace,
-                          child: _opening
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Text('Open workspace'),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: !authenticated || _opening
+                                    ? null
+                                    : _openWorkspace,
+                                child: _opening
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text('Open workspace'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton(
+                              onPressed: !authenticated || _opening
+                                  ? null
+                                  : _createFolder,
+                              child: const Text('+ Folder'),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: !authenticated || _opening
+                                  ? null
+                                  : _createFile,
+                              child: const Text('+ File'),
+                            ),
+                          ],
                         ),
                       ],
                     ),

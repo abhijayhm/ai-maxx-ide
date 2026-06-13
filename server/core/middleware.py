@@ -12,6 +12,8 @@ PUBLIC_PATHS = (
     "/api/devices/register/",
 )
 
+WS_PATH_PREFIX = "/api/ws/"
+
 
 class DeviceAuthMiddleware:
     """Validate API key and device hash for protected HTTP routes."""
@@ -22,6 +24,10 @@ class DeviceAuthMiddleware:
     def __call__(self, request):
         path = request.path
         if not path.startswith("/api/"):
+            return self.get_response(request)
+
+        # WebSockets authenticate via query string in DeviceAuthWsMiddleware.
+        if path.startswith(WS_PATH_PREFIX):
             return self.get_response(request)
 
         if path.endswith("/devices/identifier/") or path.endswith("/devices/identifier"):

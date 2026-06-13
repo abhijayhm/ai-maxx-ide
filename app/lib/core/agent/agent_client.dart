@@ -1,0 +1,115 @@
+import 'dart:async';
+
+import '../config/app_config.dart';
+import '../ws/ws_client.dart';
+
+/// Cursor agent WebSocket client (`/api/ws/agent/`).
+class AgentClient {
+  AgentClient({
+    required AppConfig config,
+    required WsSessionHeaders Function() readHeaders,
+  }) : _ws = WsClient(config: config, readHeaders: readHeaders);
+
+  final WsClient _ws;
+  final _messages = <AgentEvent>[];
+  StreamSubscription<Map<String, dynamic>>? _sub;
+  bool _running = false;
+
+  List<AgentEvent> get messages => List.unmodifiable(_messages);
+  bool get isRunning => _running;
+  bool get isConnected => _ws.isConnected;
+
+  Future<void> connect() async {
+    await _ws.connect('agent/');
+  }
+
+  Future<void> sendMessage(String text, {String? mode}) async {
+    _running = true;
+    _ws.send({
+      'type': 'message',
+      'text': text,
+      if (mode != null) 'mode': mode,
+    });
+  }
+
+  void stop() {
+    _ws.send({'type': 'stop'});
+    _running = false;
+  }
+
+  void listen(void Function(AgentEvent event) onEvent) {
+    _sub?.cancel();
+    _sub = _ws.messages.listen((frame) {
+      final event = AgentEvent.fromFrame(frame);
+      if (event != null) {
+        _messages.add(event);
+        if (event.type == AgentEventType.stopped ||
+            event.type == AgentEventType.error ||
+            event.type == AgentEventType.runFinished) {
+          _running = false;
+        }
+        onEvent(event);
+      }
+    });
+  }
+
+  Future<void> disconnect() async {
+    await _sub?.cancel();
+    await _ws.disconnect();
+    _running = false;
+  }
+}
+
+enum AgentEventType { stream, runStarted, runFinished, stopped, error, other }
+
+class AgentEvent {
+  const AgentEvent({
+    required this.type,
+    required this.raw,
+    this.text,
+  });
+
+  final AgentEventType type;
+  final Map<String, dynamic> raw;
+  final String? text;
+
+  static AgentEvent? fromFrame(Map<String, dynamic> frame) {
+    final type = frame['type'] as String? ?? '';
+    switch (type) {
+      case 'stream':
+        final message = frame['message'] as Map<String, dynamic>? ?? {};
+        final text = message['text'] as String? ??
+            message['content'] as String? ??
+            frame['text'] as String?;
+        return AgentEvent(type: AgentEventType.stream, raw: frame, text: text);
+      case 'run_started':
+        return AgentEvent(type: AgentEventType.runStarted, raw: frame);
+      case 'run_finished':
+        return AgentEvent(
+          type: AgentEventType.runFinished,
+          raw: frame,
+          text: frame['status'] as String? ?? 'completed',
+        );
+      case 'stopped':
+        return AgentEvent(type: AgentEventType.stopped, raw: frame);
+      case 'error':
+        return AgentEvent(
+          type: AgentEventType.error,
+          raw: frame,
+          text: frame['message'] as String?,
+        );
+      case 'connection_error':
+      case 'connection_closed':
+        return AgentEvent(
+          type: AgentEventType.error,
+          raw: frame,
+          text: frame['message'] as String? ??
+              (type == 'connection_closed'
+                  ? 'Agent connection closed'
+                  : 'Agent connection failed'),
+        );
+      default:
+        return null;
+    }
+  }
+}

@@ -1,4 +1,4 @@
-/// Parsed node from `POST /workspaces/{id}/sync/`.
+/// Parsed node from workspace sync WebSocket `metadata` frame.
 class SyncTreeNode {
   const SyncTreeNode({
     required this.path,
@@ -96,6 +96,28 @@ class SyncProgress {
 
   bool get isActive =>
       phase == SyncPhase.metadata || phase == SyncPhase.files;
+
+  bool get hasError => phase == SyncPhase.error;
+
+  /// Show header/banner strip (in-progress, failed, or brief success).
+  bool get showBanner =>
+      isActive || phase == SyncPhase.error || phase == SyncPhase.complete;
+
+  /// 0.0–1.0 during file sync; null while indexing metadata only.
+  double? get filesProgressFraction {
+    if (phase != SyncPhase.files || filesTotal <= 0) {
+      return null;
+    }
+    return (filesDone / filesTotal).clamp(0.0, 1.0);
+  }
+
+  int? get filesProgressPercent {
+    final fraction = filesProgressFraction;
+    if (fraction == null) {
+      return null;
+    }
+    return (fraction * 100).round().clamp(0, 100);
+  }
 
   String get statusLabel {
     switch (phase) {

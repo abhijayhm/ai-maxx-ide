@@ -1,0 +1,96 @@
+---
+description: AI Maxx IDE auth, URL layout, and server basics — read before changing API/WS client code
+alwaysApply: true
+---
+
+# Important basics
+
+## URL layout (client + server must match)
+
+| Transport | Base | Example |
+|-----------|------|---------|
+| REST | `{SERVER_DOMAIN}/api/` | `GET /api/workspaces/` |
+| WebSocket | `{SERVER_DOMAIN}/api/ws/` | `wss://…/api/ws/sync/1/?…` |
+
+Flutter source of truth: `app/lib/core/config/app_config.dart`
+
+- `apiBaseUrl` → `https://{host}/api/`
+- `webSocketUri(relativePath)` → `wss://{host}/api/ws/{relativePath}` (trailing `/` before `?`)
+- `webSocketSyncUri(workspaceId)` → `/api/ws/sync/{id}/`
+- Never build WS URLs with string concat + `Uri.parse` (causes `:0` port bugs). Use `AppConfig.webSocketUri` / `webSocketSyncUri`.
+- Never omit `port` on WebSocket `Uri` on mobile — use explicit **443** (wss) or **80** (ws); omitted port can become `:0` on Android.
+
+Server WebSocket routes: `server/config/routing.py` — all under `api/ws/…`.
+
+## REST authentication
+
+Implemented in `server/core/authentication.py` (`DeviceAPIKeyAuthentication`).
+
+Required headers on every REST call except `/api/health/` and `POST /api/devices/register/`:
+
+```
+X-API-Key: {settings.API_KEY}          # must match .env API_KEY
+X-Device-Identifier: {device_hash}     # SHA256 from device registration
+X-Workspace-Id: {id}                 # required for workspace-scoped endpoints
+```
+
+Flutter: `app/lib/core/api/api_client.dart` attaches these via Dio interceptor.
+
+Workspace-scoped views use `RequiresWorkspace` (`server/core/permissions.py`) — resolves workspace from `X-Workspace-Id` header.
+
+HTTP middleware (`server/core/middleware.py`) **skips** `/api/ws/*` — those paths are not REST; auth is on the WebSocket layer only.
+
+## WebSocket authentication
+
+Implemented in `server/core/ws_auth.py` (`DeviceAuthWsMiddleware`).
+
+Auth via **query string** on connect (same credentials as REST):
+
+```
+?api_key=…&device_hash=…&workspace_id=…
+```
+
+Flutter: `app/lib/core/ws/ws_client.dart` — use `connectSync(workspaceId)` or `connect(relativePath)`; both add auth query params.
+
+Unauthenticated WS → close `4401`. Wrong workspace → `4403`/`4404`.
+
+## Server runtime
+
+- **ASGI only** — no `wsgi.py`; entry point is `config.asgi.application` (`ASGI_APPLICATION` in settings).
+- **`manage.py runserver`** serves ASGI (HTTP + WebSockets) because `daphne` is first in `INSTALLED_APPS`. Never use `--noasgi`.
+- **uvicorn** is an optional production alternative: `uvicorn config.asgi:application --host 127.0.0.1 --port 8000`.
+- Requires `websockets` / `wsproto` when using uvicorn (`pip install -r server/requirements.txt`).
+- HTTP middleware skips `/api/ws/*`; WS auth is query-string only (`core/ws_auth.py`).
+- Public access via Cloudflare tunnel → `SERVER_DOMAIN` (default `aimaxx.organisationapp.online`).
+
+## Workspace sync
+
+- **Transport:** WebSocket only from the app (`/api/ws/sync/{id}/`).
+- **Not** blocking HTTP `POST /api/workspaces/{id}/sync/` (legacy/tests only).
+- Client: `WorkspaceSyncService` → `WsClient.connectSync()` → background via `workspaceSyncProvider`.
+- Server: `files/consumers.py` (`WorkspaceSyncConsumer`).
+
+## Defaults
+
+- Server URL: `https://aimaxx.organisationapp.online`
+- API key: must match server `.env` `API_KEY` (app default is placeholder `change-me-to-a-long-random-secret`)
+
+When adding a new WS endpoint: update `server/config/routing.py`, add test under `server/tests/test_*_ws.py`, and extend `AppConfig` / `WsClient` — keep paths under `/api/ws/`.
+
+## Remote desktop (WebRTC)
+
+- Server capture: `server/remote/screen.py` (`mss` → `aiortc` `ScreenTrack`).
+- Signaling: `server/remote/webrtc.py` + `remote/consumers.py` on `/api/ws/remote/`.
+- Client video: `flutter_webrtc` in `app/lib/core/remote/remote_webrtc.dart`.
+- Input: `input_batch` frames with `op` (`pointer_move`, `click`, `key_combo`); `REMOTE_INPUT_ENABLED` kill switch in `.env`.
+- Tests set `REMOTE_WEBRTC_STUB=true` (no real peer negotiation).
+
+## Maintaining this rule
+
+**If you discover anything globally required for the project** — auth quirks, URL conventions, server runtime requirements, footguns (e.g. Dart `port: null` → `:0`), middleware exemptions, env vars, tunnel/ASGI gotchas — **add it here**.
+
+This rule is `alwaysApply: true`. Keep it concise: one concern per bullet, concrete examples, file paths. Do not duplicate full docs; link or point to `docs/` when detail grows large.
+
+## Mobile debug skill
+
+For testing/fixing the Flutter app on device: use project skill **`.cursor/skills/flutter-android-debug/`** — Dart MCP (errors, widget tree, hot reload) + Mobile MCP (Android UI tree, taps). Screenshots last. Invoke when debugging the mobile client or when the user refers to that skill.

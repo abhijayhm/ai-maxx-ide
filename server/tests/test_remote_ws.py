@@ -11,7 +11,7 @@ async def test_remote_ws_auth_and_input(api_key, registered_device, device_hash)
     clear_staging()
     clear_executed()
 
-    url = f"/ws/remote/?api_key={api_key}&device_hash={device_hash}"
+    url = f"/api/ws/remote/?api_key={api_key}&device_hash={device_hash}"
     communicator = WebsocketCommunicator(application, url)
     connected, _ = await communicator.connect()
     assert connected
@@ -44,7 +44,7 @@ async def test_remote_ws_auth_and_input(api_key, registered_device, device_hash)
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_remote_ws_signaling(api_key, registered_device, device_hash):
-    url = f"/ws/remote/?api_key={api_key}&device_hash={device_hash}"
+    url = f"/api/ws/remote/?api_key={api_key}&device_hash={device_hash}"
     communicator = WebsocketCommunicator(application, url)
     connected, _ = await communicator.connect()
     assert connected

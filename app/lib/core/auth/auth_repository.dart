@@ -29,8 +29,10 @@ class AuthRepository {
   Future<SessionSnapshot> loadSession() async {
     final secureKey = await _secureStorage.read(key: _apiKeySetting);
     final dbKey = await _database.getSetting(_apiKeySetting);
-    final serverUrl =
-        await _database.getSetting(_serverUrlSetting) ?? AppConfig.defaultServerUrl;
+    final serverUrl = AppConfig.normalizeServerUrl(
+      await _database.getSetting(_serverUrlSetting) ??
+          AppConfig.defaultServerUrl,
+    );
     final workspaceId = await _database.getSetting(_workspaceIdSetting);
     final registered =
         (await _database.getSetting(_registeredSetting)) == 'true';
@@ -38,6 +40,7 @@ class AuthRepository {
 
     _config.serverUrl = serverUrl;
     _config.apiKey = apiKey;
+    await _database.setSetting(_serverUrlSetting, serverUrl);
 
     final deviceHash = await _deviceIdentifier.computeHash();
 

@@ -1,24 +1,28 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
-import 'package:dio/dio.dart';
 
-import '../api/api_client.dart';
+import '../config/app_config.dart';
 import '../db/app_database.dart';
+import '../ws/ws_client.dart';
 import 'sync_models.dart';
 
-/// Sequential workspace sync: metadata JSON first, inline file bodies after.
+/// Workspace sync over a single WebSocket session.
+///
+/// Server pushes metadata, inline file batches, and bind-cursor in parallel.
 class WorkspaceSyncService {
   WorkspaceSyncService({
-    required ApiClient apiClient,
+    required AppConfig config,
+    required WsSessionHeaders Function() readHeaders,
     required AppDatabase database,
     this.onProgress,
-  })  : _apiClient = apiClient,
+  })  : _ws = WsClient(config: config, readHeaders: readHeaders),
         _database = database;
 
-  static const int inlineBatchSize = 4;
+  static const _messageTimeout = Duration(minutes: 10);
 
-  final ApiClient _apiClient;
+  final WsClient _ws;
   final AppDatabase _database;
   final void Function(SyncProgress progress)? onProgress;
 
@@ -27,6 +31,8 @@ class WorkspaceSyncService {
 
   void cancel() {
     _cancelled = true;
+    _ws.send({'type': 'cancel'});
+    unawaited(_ws.disconnect());
   }
 
   Future<void> syncWorkspace(int workspaceId) async {
@@ -41,152 +47,187 @@ class WorkspaceSyncService {
     );
 
     try {
-      final response = await _apiClient.post<Map<String, dynamic>>(
-        'workspaces/$workspaceId/sync/',
-      );
-      if (_cancelled || _activeWorkspaceId != workspaceId) {
+      await _ws.connectSync(workspaceId);
+
+      final ready = await _waitForType('ready');
+      if (ready == null || _cancelled || _activeWorkspaceId != workspaceId) {
         return;
       }
 
-      final root = SyncTreeNode.fromJson(response.data!);
-      final nodes = _flattenTree(root);
-      final now = DateTime.now().toUtc().toIso8601String();
+      _ws.send({'type': 'start'});
 
-      await _database.replaceWorkspaceIndex(
-        workspaceId: workspaceId,
-        rows: nodes
-            .map(
-              (node) => IndexedFileRow(
-                path: node.path,
-                name: node.name,
-                type: node.type,
-                size: node.size,
-                syncPolicy: node.syncPolicy,
-                modifiedAt: node.modifiedAt,
-                syncedAt: now,
-              ),
-            )
-            .toList(),
-      );
-
-      if (_cancelled || _activeWorkspaceId != workspaceId) {
-        return;
-      }
-
-      final inlineFiles =
-          nodes.where((node) => node.isFile && node.isInline).toList();
-
-      _emit(
-        SyncProgress(
-          phase: SyncPhase.files,
-          workspaceId: workspaceId,
-          metadataTotal: nodes.length,
-          metadataDone: nodes.length,
-          filesTotal: inlineFiles.length,
-          filesDone: 0,
-        ),
-      );
-
+      var metadataTotal = 0;
+      var inlineTotal = 0;
       var filesDone = 0;
-      for (var i = 0; i < inlineFiles.length; i += inlineBatchSize) {
-        if (_cancelled || _activeWorkspaceId != workspaceId) {
+
+      while (!_cancelled && _activeWorkspaceId == workspaceId) {
+        final message = await _nextMessage();
+        if (message == null) {
+          _emit(
+            SyncProgress(
+              phase: SyncPhase.error,
+              workspaceId: workspaceId,
+              errorMessage: 'Sync timed out waiting for server',
+            ),
+          );
           return;
         }
 
-        final chunk = inlineFiles.skip(i).take(inlineBatchSize).toList();
-        await _storeInlineBatch(workspaceId, chunk);
+        final type = message['type'] as String? ?? '';
 
-        filesDone += chunk.length;
+        if (type == 'sync_started' || type == 'bind_cursor') {
+          continue;
+        }
+
+        if (type == 'metadata') {
+          final root = SyncTreeNode.fromJson(
+            message['tree'] as Map<String, dynamic>,
+          );
+          inlineTotal = message['files_total'] as int? ?? 0;
+          final nodes = _flattenTree(root);
+          metadataTotal = nodes.length;
+
+          await _database.replaceWorkspaceIndex(
+            workspaceId: workspaceId,
+            rows: nodes
+                .map(
+                  (node) => IndexedFileRow(
+                    path: node.path,
+                    name: node.name,
+                    type: node.type,
+                    size: node.size,
+                    syncPolicy: node.syncPolicy,
+                    modifiedAt: node.modifiedAt,
+                    syncedAt: DateTime.now().toUtc().toIso8601String(),
+                  ),
+                )
+                .toList(),
+          );
+
+          _emit(
+            SyncProgress(
+              phase: SyncPhase.files,
+              workspaceId: workspaceId,
+              metadataTotal: metadataTotal,
+              metadataDone: metadataTotal,
+              filesTotal: inlineTotal,
+              filesDone: 0,
+            ),
+          );
+          continue;
+        }
+
+        if (type == 'files') {
+          final files = message['files'] as List<dynamic>? ?? [];
+          filesDone = message['files_done'] as int? ?? filesDone;
+          inlineTotal = message['files_total'] as int? ?? inlineTotal;
+
+          for (final raw in files) {
+            await _storeFile(workspaceId, raw as Map<String, dynamic>);
+          }
+
+          _emit(
+            SyncProgress(
+              phase: SyncPhase.files,
+              workspaceId: workspaceId,
+              metadataTotal: metadataTotal,
+              metadataDone: metadataTotal,
+              filesTotal: inlineTotal,
+              filesDone: filesDone,
+            ),
+          );
+          continue;
+        }
+
+        if (type == 'complete') {
+          _emit(
+            SyncProgress(
+              phase: SyncPhase.complete,
+              workspaceId: workspaceId,
+              metadataTotal: metadataTotal,
+              metadataDone: metadataTotal,
+              filesTotal: inlineTotal,
+              filesDone: filesDone,
+            ),
+          );
+          return;
+        }
+
+        if (type == 'error' ||
+            type == 'connection_closed' ||
+            type == 'connection_error') {
+          _emit(
+            SyncProgress(
+              phase: SyncPhase.error,
+              workspaceId: workspaceId,
+              errorMessage: message['message'] as String? ??
+                  'Workspace sync failed',
+            ),
+          );
+          return;
+        }
+      }
+    } catch (error) {
+      if (!_cancelled) {
         _emit(
           SyncProgress(
-            phase: SyncPhase.files,
+            phase: SyncPhase.error,
             workspaceId: workspaceId,
-            metadataTotal: nodes.length,
-            metadataDone: nodes.length,
-            filesTotal: inlineFiles.length,
-            filesDone: filesDone,
+            errorMessage: error.toString(),
           ),
         );
       }
+    } finally {
+      await _ws.disconnect();
+    }
+  }
 
-      if (_cancelled || _activeWorkspaceId != workspaceId) {
-        return;
+  Future<Map<String, dynamic>?> _waitForType(String type) async {
+    final deadline = DateTime.now().add(_messageTimeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final message = await _nextMessage();
+      if (message == null) {
+        return null;
       }
-
-      _emit(
-        SyncProgress(
-          phase: SyncPhase.complete,
-          workspaceId: workspaceId,
-          metadataTotal: nodes.length,
-          metadataDone: nodes.length,
-          filesTotal: inlineFiles.length,
-          filesDone: inlineFiles.length,
-        ),
-      );
-    } on DioException catch (error) {
-      _emit(
-        SyncProgress(
-          phase: SyncPhase.error,
-          workspaceId: workspaceId,
-          errorMessage: error.message ?? 'Workspace sync failed',
-        ),
-      );
-    } catch (error) {
-      _emit(
-        SyncProgress(
-          phase: SyncPhase.error,
-          workspaceId: workspaceId,
-          errorMessage: error.toString(),
-        ),
-      );
+      if (message['type'] == type) {
+        return message;
+      }
+      if (message['type'] == 'error') {
+        return message;
+      }
     }
+    return null;
   }
 
-  Future<void> bindCursorInBackground(int workspaceId) async {
+  Future<Map<String, dynamic>?> _nextMessage() async {
     try {
-      await _apiClient.post('workspaces/$workspaceId/bind-cursor/');
-    } on DioException {
-      // Cursor binding is optional for shell unlock.
+      return await _ws.receive().timeout(_messageTimeout);
+    } on TimeoutException {
+      return null;
+    } on StateError {
+      return null;
     }
   }
 
-  Future<void> _storeInlineBatch(
-    int workspaceId,
-    List<SyncTreeNode> nodes,
-  ) async {
-    if (nodes.isEmpty) {
+  Future<void> _storeFile(int workspaceId, Map<String, dynamic> item) async {
+    final path = item['path'] as String? ?? '';
+    final encoded = item['content_base64'] as String?;
+    if (path.isEmpty || encoded == null || encoded.isEmpty) {
       return;
     }
 
-    final response = await _apiClient.post<Map<String, dynamic>>(
-      'workspaces/$workspaceId/sync/files/',
-      data: {
-        'paths': nodes.map((node) => node.path).toList(),
-      },
-    );
-
-    final files = response.data?['files'] as List<dynamic>? ?? [];
-    for (final raw in files) {
-      final item = raw as Map<String, dynamic>;
-      final path = item['path'] as String? ?? '';
-      final encoded = item['content_base64'] as String?;
-      if (path.isEmpty || encoded == null || encoded.isEmpty) {
-        continue;
-      }
-
-      final bytes = base64Decode(encoded);
-      final content = _decodeText(bytes);
-      if (content == null) {
-        continue;
-      }
-
-      await _database.updateFileContent(
-        workspaceId: workspaceId,
-        path: path,
-        content: content,
-        contentHash: sha256.convert(utf8.encode(content)).toString(),
-      );
+    final bytes = base64Decode(encoded);
+    final content = _decodeText(bytes);
+    if (content == null) {
+      return;
     }
+
+    await _database.updateFileContent(
+      workspaceId: workspaceId,
+      path: path,
+      content: content,
+      contentHash: sha256.convert(utf8.encode(content)).toString(),
+    );
   }
 
   String? _decodeText(List<int> bytes) {

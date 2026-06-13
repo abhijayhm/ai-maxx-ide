@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "server_url": "https://aimaxx.organisationapp.online",
+  "api_base_path": "/api/",
+  "ws_base_path": "/api/ws/",
+  "auth": {
+    "rest_headers": ["X-API-Key", "X-Device-Identifier", "X-Workspace-Id"],
+    "ws_query": ["api_key", "device_hash", "workspace_id"]
+  },
+  "rest": {
+    "health": { "method": "GET", "path": "health/", "auth": "none" },
+    "devices_register": { "method": "POST", "path": "devices/register/", "auth": "api_key" },
+    "devices_identifier": { "method": "POST", "path": "devices/identifier/", "auth": "api_key" },
+    "workspaces_list": { "method": "GET", "path": "workspaces/", "auth": "device" },
+    "workspaces_create": { "method": "POST", "path": "workspaces/", "auth": "device" },
+    "workspaces_detail": { "method": "GET", "path": "workspaces/{workspace_id}/", "auth": "device" },
+    "workspaces_bind_cursor": { "method": "POST", "path": "workspaces/{workspace_id}/bind-cursor/", "auth": "device" },
+    "workspaces_sync": { "method": "POST", "path": "workspaces/{workspace_id}/sync/", "auth": "device" },
+    "workspaces_sync_files": { "method": "POST", "path": "workspaces/{workspace_id}/sync/files/", "auth": "device" },
+    "files_roots": { "method": "GET", "path": "files/roots/", "auth": "device" },
+    "files_by_path": { "method": "GET", "path": "files/by-path/", "auth": "device" },
+    "files_download": { "method": "GET", "path": "files/download/", "auth": "device" },
+    "files_mkdir": { "method": "POST", "path": "files/mkdir/", "auth": "device" },
+    "files_touch": { "method": "POST", "path": "files/touch/", "auth": "device" },
+    "search_files": { "method": "GET", "path": "search/files/", "auth": "workspace" },
+    "search_grep": { "method": "POST", "path": "search/grep/", "auth": "workspace" },
+    "agent_messages": { "method": "GET", "path": "agent/messages/", "auth": "workspace" },
+    "agent_stop": { "method": "POST", "path": "agent/stop/", "auth": "workspace" },
+    "agent_status": { "method": "GET", "path": "agent/status/", "auth": "workspace" },
+    "terminals_list": { "method": "GET", "path": "terminals/", "auth": "workspace" },
+    "terminals_create": { "method": "POST", "path": "terminals/", "auth": "workspace" },
+    "terminals_detail": { "method": "GET", "path": "terminals/{terminal_id}/", "auth": "workspace" },
+    "terminals_exec": { "method": "POST", "path": "terminals/{terminal_id}/exec/", "auth": "workspace" },
+    "git_status": { "method": "GET", "path": "git/status/", "auth": "workspace" },
+    "git_stage": { "method": "POST", "path": "git/stage/", "auth": "workspace" },
+    "git_unstage": { "method": "POST", "path": "git/unstage/", "auth": "workspace" },
+    "git_discard": { "method": "POST", "path": "git/discard/", "auth": "workspace" },
+    "git_stash": { "method": "POST", "path": "git/stash/", "auth": "workspace" },
+    "git_commit": { "method": "POST", "path": "git/commit/", "auth": "workspace" },
+    "git_sync": { "method": "POST", "path": "git/sync/", "auth": "workspace" },
+    "git_exec": { "method": "POST", "path": "git/exec/", "auth": "workspace" },
+    "git_branches": { "method": "GET", "path": "git/branches/", "auth": "workspace" },
+    "git_checkout": { "method": "POST", "path": "git/checkout/", "auth": "workspace" },
+    "git_log": { "method": "GET", "path": "git/log/", "auth": "workspace" }
+  },
+  "websocket": {
+    "agent": { "path": "agent/" },
+    "sync": { "path": "sync/{workspace_id}/", "params": ["workspace_id"] },
+    "terminals": { "path": "terminals/{session_id}/", "params": ["session_id"] },
+    "remote": { "path": "remote/" }
+  }
+}

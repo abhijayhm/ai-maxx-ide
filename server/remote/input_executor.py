@@ -26,10 +26,30 @@ def clear_executed() -> None:
     _executed.clear()
 
 
+def _normalize_event(event: dict) -> dict:
+    """Map mobile client frames (`action`) to executor ops (`op`)."""
+    normalized = dict(event)
+    if "op" not in normalized and "action" in normalized:
+        action = normalized.pop("action")
+        if action == "click":
+            normalized["op"] = "click"
+        elif action == "key":
+            key = normalized.pop("key", "")
+            normalized["op"] = "key_combo"
+            normalized["keys"] = [key] if key else []
+        elif action in ("pointer_move", "move"):
+            normalized["op"] = "pointer_move"
+        else:
+            normalized["op"] = action
+    return normalized
+
+
 def execute_batch(events: list[dict], dispatch: bool = False) -> list[dict]:
     """Execute input events. Uses pynput when available, otherwise records stubs."""
     if not settings.REMOTE_INPUT_ENABLED:
         return []
+
+    events = [_normalize_event(event) for event in events]
 
     to_run: list[dict] = []
     if dispatch:

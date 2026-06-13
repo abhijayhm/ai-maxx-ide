@@ -31,6 +31,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (!ready && onShellTab) {
         return '/menu/workspace';
       }
+      if (!ready && state.matchedLocation == '/menu/git') {
+        return '/menu/workspace';
+      }
       if (ready && state.matchedLocation == '/menu/workspace') {
         return null;
       }

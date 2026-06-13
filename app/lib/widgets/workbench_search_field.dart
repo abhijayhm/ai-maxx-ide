@@ -58,7 +58,7 @@ class WorkbenchSearchField extends StatelessWidget {
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               tooltip: 'Clear search',
             ),
-          if (showStop && onStop != null)
+          if ((showStop || onStop != null) && onStop != null)
             IconButton(
               onPressed: onStop,
               icon: Icon(Icons.stop, size: 16, color: colors.fgMuted),

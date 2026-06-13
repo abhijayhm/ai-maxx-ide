@@ -97,3 +97,17 @@ def closed_terminal(db, registered_device, workspace):
 @pytest.fixture(autouse=True)
 def fake_pty_backend(monkeypatch):
     monkeypatch.setenv("TERMINAL_PTY_BACKEND", "fake")
+
+
+@pytest.fixture(autouse=True)
+def stub_cursor_agent(settings, monkeypatch):
+    """Tests must not call the real Cursor SDK (hangs without credentials/network)."""
+    monkeypatch.setenv("CURSOR_API_KEY", "")
+    settings.CURSOR_API_KEY = ""
+
+
+@pytest.fixture(autouse=True)
+def stub_remote_webrtc(settings, monkeypatch):
+    """WebRTC tests use fake SDP — keep stub answers (no real peer negotiation)."""
+    monkeypatch.setenv("REMOTE_WEBRTC_STUB", "true")
+    settings.REMOTE_WEBRTC_STUB = True

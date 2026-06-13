@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../sync/sync_models.dart';
+import '../repositories/search_repository.dart';
 import '../providers/app_providers.dart';
+import 'search_provider.dart';
 import 'sync_provider.dart';
 
 final fileSearchProvider =
@@ -18,7 +20,25 @@ final fileSearchProvider =
   }
 
   final database = await ref.watch(appDatabaseProvider.future);
-  return database.searchFiles(workspaceId: workspaceId, query: trimmed);
+  final local = await database.searchFiles(workspaceId: workspaceId, query: trimmed);
+  if (local.isNotEmpty) {
+    return local;
+  }
+
+  final repo = await ref.watch(searchRepositoryProvider.future);
+  final serverHits = await repo.searchFiles(trimmed);
+  return serverHits
+      .map(
+        (hit) => IndexedFileRow(
+          path: hit.path,
+          name: hit.name,
+          type: 'file',
+          size: 0,
+          syncPolicy: 'metadata_only',
+          syncedAt: '',
+        ),
+      )
+      .toList();
 });
 
 final indexedFileStatsProvider = FutureProvider<({int total, int withContent})>(

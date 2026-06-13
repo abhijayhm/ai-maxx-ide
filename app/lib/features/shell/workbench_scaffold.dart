@@ -4,8 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/providers/sync_provider.dart';
+import '../../core/sync/sync_models.dart';
 import '../../theme/workbench_colors.dart';
-import '../../widgets/workbench_search_field.dart';
+import '../../widgets/sync_progress_banner.dart';
 
 class WorkbenchScaffold extends ConsumerWidget {
   const WorkbenchScaffold({super.key, required this.child});
@@ -37,8 +38,10 @@ class WorkbenchScaffold extends ConsumerWidget {
             if (showShellChrome)
               _WorkbenchHeader(
                 onMenuTap: () => context.push('/menu/workspace'),
-                syncLabel: sync.isActive ? sync.statusLabel : null,
+                syncProgress: sync.showBanner ? sync : null,
               ),
+            if (showShellChrome && (sync.isActive || sync.hasError))
+              SyncProgressBanner(progress: sync),
             Expanded(child: child),
             if (showShellChrome)
               _WorkbenchBottomNav(
@@ -77,11 +80,11 @@ class _TabSpec {
 class _WorkbenchHeader extends StatelessWidget {
   const _WorkbenchHeader({
     required this.onMenuTap,
-    this.syncLabel,
+    this.syncProgress,
   });
 
   final VoidCallback onMenuTap;
-  final String? syncLabel;
+  final SyncProgress? syncProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -101,16 +104,21 @@ class _WorkbenchHeader extends StatelessWidget {
             icon: Icon(Icons.menu, color: colors.fgDefault),
             tooltip: 'Menu',
           ),
-          const Expanded(
-            child: WorkbenchSearchField(),
-          ),
-          if (syncLabel != null && syncLabel!.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            Text(
-              syncLabel!,
-              style: TextStyle(color: colors.fgMuted, fontSize: 11),
+          Expanded(
+            child: Text(
+              'AI Maxx IDE',
+              style: TextStyle(
+                color: colors.fgStrong,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ],
+          ),
+          if (syncProgress != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: SyncProgressBanner(progress: syncProgress!, compact: true),
+            ),
         ],
       ),
     );
@@ -184,29 +192,26 @@ class _BottomTab extends StatelessWidget {
       color: active ? colors.canvas : colors.chrome,
       child: InkWell(
         onTap: onTap,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (active)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: Container(height: 2, color: colors.accentPrimary),
-              ),
-            Center(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                  color: enabled
-                      ? (active ? colors.fgStrong : colors.fgDefault)
-                      : colors.fgInactive,
-                ),
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                color: active ? colors.accentPrimary : Colors.transparent,
+                width: 2,
               ),
             ),
-          ],
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+              color: enabled
+                  ? (active ? colors.fgStrong : colors.fgDefault)
+                  : colors.fgInactive,
+            ),
+          ),
         ),
       ),
     );

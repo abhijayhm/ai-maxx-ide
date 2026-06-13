@@ -34,12 +34,19 @@ env\Scripts\activate
 cd server
 python manage.py migrate
 
-# Dev — quick HTTP (WebSockets limited; OK for admin/REST smoke tests)
+# Dev — ASGI (REST + WebSockets). daphne is first in INSTALLED_APPS, so runserver
+# serves config.asgi.application (HTTP + WS). Do NOT pass --noasgi.
+cd server
 python manage.py runserver 127.0.0.1:8000
+# expect: "Starting ASGI/Daphne version ... development server at http://127.0.0.1:8000/"
 
-# Dev / prod — ASGI (REST + WebSockets; use with Cloudflare tunnel)
+# Production / tunnel (alternative to runserver):
 cd server
 ..\env\Scripts\uvicorn.exe config.asgi:application --host 127.0.0.1 --port 8000
+
+# If WS returns 404 + "No supported WebSocket library detected", reinstall:
+..\env\Scripts\pip.exe install -r requirements.txt
+# (needs websockets + wsproto from uvicorn[standard]; restart uvicorn after)
 
 # Or from repo root with venv active:
 uvicorn config.asgi:application --host 127.0.0.1 --port 8000 --app-dir server
@@ -61,7 +68,7 @@ C:\flutter\bin\flutter pub get
 C:\flutter\bin\flutter devices
 
 # Hot-reload dev run (replace DEVICE_ID, e.g. 6000cc2e)
-C:\flutter\bin\flutter run -d DEVICE_ID
+C:\flutter\bin\flutter run -d 6000cc2e
 
 # Install debug build without keeping terminal attached (build + install)
 C:\flutter\bin\flutter install -d DEVICE_ID
@@ -92,6 +99,32 @@ C:\flutter\bin\flutter install -d DEVICE_ID --release
 C:\flutter\bin\flutter build apk --release --split-per-abi
 #   app-arme64-v8a-release.apk  (most modern phones)
 #   adb install -r build\app\outputs\flutter-apk\app-arme64-v8a-release.apk
+
+
+--- Remote desktop (WebRTC) ---
+
+# Server must run on the Windows machine whose screen you want to share.
+# Installs aiortc + mss + av + pynput (see server/requirements.txt):
+cd server
+..\env\Scripts\pip install -r requirements.txt
+
+# .env flags (sample.env):
+#   REMOTE_INPUT_ENABLED=true   — allow trackpad/keyboard injection (pynput)
+#   REMOTE_WEBRTC_STUB=false    — set true only for tests / no capture hardware
+
+# Remote tab flow (Flutter):
+#   1) WS connect  wss://{SERVER_DOMAIN}/api/ws/remote/?api_key=…&device_hash=…
+#   2) Client sends WebRTC offer; server answers with desktop ScreenTrack (mss)
+#   3) flutter_webrtc renders video; trackpad/keyboard use input_batch frames
+
+# Flutter rebuild after adding flutter_webrtc:
+cd app
+C:\flutter\bin\flutter pub get
+C:\flutter\bin\flutter run -d DEVICE_ID
+
+# Verify remote WS + signaling (pytest uses REMOTE_WEBRTC_STUB=true):
+cd server
+..\env\Scripts\python.exe -m pytest tests/test_remote_ws.py -v
 
 
 --- Cloudflare tunnel (server URL only) ---

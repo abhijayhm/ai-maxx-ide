@@ -4,16 +4,20 @@ channels>=4.0,<5
 channels-redis>=4.2,<5
 daphne>=4.0,<5
 uvicorn[standard]>=0.30,<1
+websockets>=12.0
+wsproto>=1.2
 django-environ>=0.11,<1
 cursor-sdk>=0.1
 pytest>=8.0,<9
 pytest-django>=4.8,<5
 pytest-asyncio>=0.24,<1
 
-# Optional extras (install with: pip install -e ".[windows,remote]")
+# Remote desktop (WebRTC screen + input)
+aiortc>=1.9,<2
+mss>=9.0,<10
+av>=12.0,<14
+numpy>=1.26,<3
+pynput>=1.7,<2
+
+# Optional extras
 # pywinpty>=2.0
-# aiortc>=1.9
-# mss>=9.0
-# av>=12.0
-# pynput>=1.7
-# numpy>=1.26

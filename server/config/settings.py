@@ -14,6 +14,7 @@ env = environ.Env(
     BIND_PORT=(int, 8000),
     TERMINAL_IDLE_TTL=(int, 3600),
     REMOTE_INPUT_ENABLED=(bool, True),
+    REMOTE_WEBRTC_STUB=(bool, False),
 )
 
 environ.Env.read_env(REPO_ROOT / ".env")
@@ -33,8 +34,10 @@ BIND_PORT = env("BIND_PORT")
 REDIS_URL = env("REDIS_URL", default="redis://127.0.0.1:6379/0")
 TERMINAL_IDLE_TTL = timedelta(seconds=env("TERMINAL_IDLE_TTL"))
 REMOTE_INPUT_ENABLED = env("REMOTE_INPUT_ENABLED")
+REMOTE_WEBRTC_STUB = env("REMOTE_WEBRTC_STUB")
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -64,7 +67,6 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 ASGI_APPLICATION = "config.asgi.application"
-WSGI_APPLICATION = "config.wsgi.application"
 
 TEMPLATES = [
     {

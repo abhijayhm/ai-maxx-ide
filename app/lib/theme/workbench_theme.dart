@@ -96,10 +96,14 @@ ThemeData buildWorkbenchTheme() {
   );
 }
 
-TextStyle workbenchMonoStyle(BuildContext context, {double size = 13}) {
+TextStyle workbenchMonoStyle(
+  BuildContext context, {
+  double size = 13,
+  Color? color,
+}) {
   return GoogleFonts.ubuntuMono(
     fontSize: size,
     height: 1.5,
-    color: context.workbenchColors.fgDefault,
+    color: color ?? context.workbenchColors.fgDefault,
   );
 }

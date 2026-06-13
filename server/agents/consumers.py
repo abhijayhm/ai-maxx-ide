@@ -41,6 +41,11 @@ class AgentConsumer(AsyncWebsocketConsumer):
             self.pending_auth = True
             await self.accept()
 
+    async def disconnect(self, close_code):
+        self.authenticated = False
+        self.device = None
+        self.workspace = None
+
     async def receive(self, text_data=None, bytes_data=None):
         if text_data is None:
             return
