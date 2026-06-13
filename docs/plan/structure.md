@@ -4,13 +4,19 @@ Definition document for the **ai-maxx-ide** monorepo. This file is the source of
 
 ## Intent
 
-A Windows workstation runs the **server** (Django + Channels + Cursor SDK + remote desktop + local terminal PTYs). A **Flutter mobile app** connects over **HTTPS/WSS** to a public hostname (typically via an external Cloudflare Tunnel you configure yourself). Container packaging lives under `docker/`.
+A Windows workstation runs the **server** (Django + Channels + Cursor SDK + remote desktop + local terminal PTYs). A **Flutter mobile app** connects over **HTTPS/WSS** through a **Cloudflare Tunnel** (`scripts/windows/`). Container packaging lives under `docker/`.
 
 ```
 ai-maxx-ide/
 ├── app/                          # Flutter mobile IDE client
 ├── server/                       # Django ASGI backend (API + WebSockets)
 ├── docker/                       # Compose, images, deployment helpers
+├── scripts/
+│   └── windows/
+│       ├── setup_cloudflare_tunnel.bat  # Windows entry point
+│       ├── setup_cloudflare_tunnel.py   # SERVER_DOMAIN → :8000 only
+│       ├── start_services.bat
+│       └── README.md
 ├── docs/
 │   ├── designs/design.md         # Visual language (VS Code dark workbench)
 │   ├── wireframes/wireframes_v4.html
@@ -56,11 +62,36 @@ flowchart LR
 | Remote socket | WSS + WebRTC | Screen relay signaling + input events |
 | Terminal socket | WSS | Interactive local shell PTY (create/manage via REST) |
 
-**No raw SSH ingress.** Terminals are local Windows shells proxied over `wss://{SERVER_DOMAIN}/ws/terminals/{id}/`. Clients need only HTTPS — no `cloudflared` on phones or laptops.
+**No raw SSH ingress.** Terminals use WSS on `SERVER_DOMAIN`. Tunnel script exposes API/WSS only.
 
-## Public exposure (out of repo)
+## `scripts/windows/`
 
-Expose `127.0.0.1:{BIND_PORT}` with your own Cloudflare Tunnel, reverse proxy, or VPN. This repo does not ship tunnel bootstrap scripts. Minimum ingress:
+### `setup_cloudflare_tunnel.bat`
+
+Windows entry point. Re-launches elevated when needed (cloudflared install + optional Windows service). Reads **`{repo}/.env`**.
+
+| Source in `.env` | Tunnel ingress |
+| --- | --- |
+| `SERVER_DOMAIN` | `http://127.0.0.1:{BIND_PORT}` |
+| `TUNNEL_EXTRA_INGRESS` (JSON) | Additional `{hostname, service}` pairs |
+
+Responsibilities:
+
+1. Download/install `cloudflared.exe` to `C:\cloudflared` + machine `PATH`.
+2. Cloudflare login if `~/.cloudflared/cert.pem` missing.
+3. Create named tunnel (`TUNNEL_NAME`) + write `~/.cloudflared/config.yml`.
+4. DNS route for `SERVER_DOMAIN` (+ extras).
+5. Optional `cloudflared` Windows service when `INSTALL_CLOUDFLARED_SERVICE=true`.
+
+**Production:** Django ASGI on `127.0.0.1:{BIND_PORT}` (default `8000`):
+
+```bat
+cd server
+uvicorn config.asgi:application --host 127.0.0.1 --port 8000
+cloudflared tunnel run ai-maxx-ide
+```
+
+## Public exposure
 
 | Hostname | Backend |
 | --- | --- |
@@ -134,11 +165,14 @@ server/
 
 Copy `sample.env` → `.env` at repo root.
 
-| Variable | Description |
-| --- | --- |
-| `SERVER_DOMAIN` | Public API hostname the app uses (e.g. `app.example.com`) |
-| `BIND_HOST` | Local bind address (default `127.0.0.1`) |
-| `BIND_PORT` | Local bind port (default `8000`) |
+| Variable | Used by | Description |
+| --- | --- | --- |
+| `SERVER_DOMAIN` | tunnel, app, server | Public API hostname |
+| `TUNNEL_NAME` | tunnel | cloudflared tunnel name |
+| `BIND_HOST` | server | Local bind address (default `127.0.0.1`) |
+| `BIND_PORT` | tunnel, server | Local bind port (default `8000`) |
+| `TUNNEL_EXTRA_INGRESS` | tunnel | Optional JSON `[{hostname, service}, ...]` |
+| `INSTALL_CLOUDFLARED_SERVICE` | tunnel | `true` to install cloudflared as Windows service |
 | `CURSOR_API_KEY` | Cursor SDK user/service key |
 | `API_KEY` | Shared secret mobile clients send as `X-API-Key` |
 | `EXPOSED_DIRECTORIES_ABSOLUTE_PATHS` | JSON array of allowed workspace roots |
@@ -232,7 +266,7 @@ After `POST /api/workspaces/` + client-side Cursor workspace bind, enable full t
 
 | Phase | Deliverable |
 | --- | --- |
-| P0 | Django skeleton + device auth + `.env` |
+| P0 | `scripts/windows` tunnel + Django skeleton + device auth |
 | P1 | Workspace/files/git REST + hamburger menu in Flutter |
 | P2 | Agent WebSocket + Projects tab composer |
 | P3 | Terminals REST + PTY WebSocket |

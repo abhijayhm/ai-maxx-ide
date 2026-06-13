@@ -68,7 +68,8 @@ docker/.env
 Thumbs.db
 Desktop.ini
 
-# --- Logs & temp ---
+scripts/windows/__pycache__/
+
 *.log
 tunnel-setup-run.log
 cloudflared-run.log
