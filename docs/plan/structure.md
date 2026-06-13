@@ -13,15 +13,16 @@ ai-maxx-ide/
 ├── docker/                       # Compose, images, deployment helpers
 ├── scripts/
 │   └── windows/
-│       ├── setup_cloudflare_tunnel.py   # Cloudflare + SSH bootstrap (provided)
+│       ├── setup_cloudflare_tunnel.bat  # Windows entry point (run as admin)
+│       ├── setup_cloudflare_tunnel.py   # Cloudflare + SSH bootstrap logic
 │       └── README.md
 ├── docs/
 │   ├── designs/design.md         # Visual language (VS Code dark workbench)
 │   ├── wireframes/wireframes_v4.html
 │   ├── third-party-docs/cursor-sdk.md
 │   └── plan/                     # ← implementation definitions (this folder)
-├── .env.example                  # Root template (never commit real secrets)
-└── .gitignore
+├── sample.env                      # Env template — copy to .env (never commit .env)
+├── .gitignore
 ```
 
 ## Runtime topology
@@ -64,22 +65,34 @@ flowchart LR
 
 ## `scripts/windows/`
 
+### `setup_cloudflare_tunnel.bat`
+
+Windows entry point. Double-click or run from cmd; re-launches elevated when needed (OpenSSH + machine `PATH` require admin). Resolves Python 3.10+ via `py -3` or `python`, then runs `setup_cloudflare_tunnel.py`.
+
 ### `setup_cloudflare_tunnel.py`
 
-Rerun-safe bootstrap script (user-provided). Responsibilities:
+Rerun-safe bootstrap logic (invoked by the `.bat` file). Reads **`{repo}/.env`** (copy from `sample.env`). No interactive domain prompts.
+
+**Tunnel hostnames (default: 2 + optional extras):**
+
+| Source in `.env` | Tunnel ingress |
+| --- | --- |
+| `SERVER_DOMAIN` | `http://127.0.0.1:{LOCAL_SERVER_PORT}` (Django API + WSS) |
+| `SSH_DOMAIN` | `ssh://localhost:22` |
+| `TUNNEL_EXTRA_INGRESS` (JSON array) | Additional `{hostname, service}` pairs |
+
+DNS routes are created for **every** ingress hostname. Responsibilities:
 
 1. Download/install `cloudflared.exe` to `C:\cloudflared` and append to machine `PATH`.
 2. Ensure **OpenSSH Server** on Windows (install capability, start `sshd`, firewall rule on 22).
 3. Interactive Cloudflare login (`cloudflared tunnel login`) if `~/.cloudflared/cert.pem` missing.
-4. Create named tunnel + write `~/.cloudflared/config.yml` with ingress:
-   - `app.{domain}` → `http://127.0.0.1:{app_port}` (Django)
-   - `ssh.{domain}` → `ssh://localhost:22`
-5. DNS routes for both hostnames.
-6. Optional Windows service install for `cloudflared`.
-7. Optional SSH client config block using `ProxyCommand cloudflared access ssh`.
-8. Scaffold a minimal Flask `app.py` on `{app_port}` for smoke testing (production replaces this with Django).
+4. Create named tunnel (`TUNNEL_NAME` from `.env`) + write `~/.cloudflared/config.yml` from `.env` hostnames.
+5. DNS routes for each ingress hostname.
+6. Optional Windows service install when `INSTALL_CLOUDFLARED_SERVICE=true`.
+7. Optional SSH client config when `SSH_USERNAME` is set (`ProxyCommand cloudflared access ssh`).
+8. Optional Flask smoke-test `scripts/windows/app.py` when `SKIP_FLASK_SMOKE_TEST=false`.
 
-**Production note:** Django should bind `127.0.0.1:8000` (or configured port). The tunnel script's Flask stub is only for first-run validation.
+**Production note:** Django binds `127.0.0.1:{LOCAL_SERVER_PORT}` (default `8000`). Same `.env` keys are used by `server/` later.
 
 ### Future scripts (not in scope yet)
 
@@ -154,16 +167,24 @@ server/
 
 ### Server `.env` (required keys)
 
-| Variable | Description |
-| --- | --- |
-| `CURSOR_API_KEY` | Cursor SDK user/service key |
-| `API_KEY` | Shared secret mobile clients send as `X-API-Key` |
-| `SSH_DOMAIN` | Public SSH hostname (informational / client config) |
-| `SERVER_DOMAIN` | Public API hostname |
-| `EXPOSED_DIRECTORIES_ABSOLUTE_PATHS` | JSON array of allowed workspace roots, e.g. `["C:/dev/proj-a","D:/repos"]` |
-| `DJANGO_SECRET_KEY` | Standard Django secret |
-| `REDIS_URL` | Channels layer (if not in-memory dev) |
-| `DATABASE_URL` | SQLite dev; Postgres prod optional |
+Copy `sample.env` → `.env` at repo root. Tunnel setup and Django share this file.
+
+| Variable | Used by | Description |
+| --- | --- | --- |
+| `SERVER_DOMAIN` | tunnel, app, server | Full public API hostname (e.g. `app.example.com`) |
+| `SSH_DOMAIN` | tunnel, server | Full public SSH hostname (e.g. `ssh.example.com`) |
+| `TUNNEL_NAME` | tunnel | cloudflared tunnel name |
+| `LOCAL_SERVER_PORT` | tunnel, server | Local bind port (default `8000`) |
+| `TUNNEL_EXTRA_INGRESS` | tunnel | Optional JSON `[{hostname, service}, ...]` |
+| `SSH_USERNAME` | tunnel | Optional `~/.ssh/config` entry for `SSH_DOMAIN` |
+| `INSTALL_CLOUDFLARED_SERVICE` | tunnel | `true` to install cloudflared as Windows service |
+| `SKIP_FLASK_SMOKE_TEST` | tunnel | `true` (default) skips Flask smoke-test app |
+| `CURSOR_API_KEY` | server | Cursor SDK user/service key |
+| `API_KEY` | server | Shared secret mobile clients send as `X-API-Key` |
+| `EXPOSED_DIRECTORIES_ABSOLUTE_PATHS` | server | JSON array of allowed workspace roots |
+| `DJANGO_SECRET_KEY` | server | Standard Django secret |
+| `REDIS_URL` | server | Channels layer (if not in-memory dev) |
+| `DATABASE_URL` | server | SQLite dev; Postgres prod optional |
 
 ## `app/`
 
