@@ -13,7 +13,7 @@ Django ASGI server for the mobile IDE agent workstation. Implements REST + WebSo
 | Agent | `cursor-sdk` | Local runtime against workspace `cwd` |
 | Screen | `aiortc` + `mss` + `av` (PyAV) | Custom `VideoStreamTrack` |
 | Input | `pynput` | Mouse + keyboard combo executor |
-| Terminal | `asyncssh` or `paramiko` + `winpty` / `pywinpty` | SSH sessions; local ConPTY on Windows |
+| Terminal | `pywinpty` / `winpty` | Local ConPTY shells on Windows; no external SSH |
 | Git | `subprocess` → `git` CLI | No Dulwich; match user’s installed git |
 | Search (server) | `ripgrep` subprocess preferred, `grep` fallback | Workspace-scoped |
 
@@ -25,7 +25,7 @@ Django ASGI server for the mobile IDE agent workstation. Implements REST + WebSo
 | `agents` | Cursor SDK bridge, agent messages, WS stream |
 | `files` | Directory listing, sync tree, file bytes |
 | `gitapp` | Porcelain git operations for Git tab |
-| `terminals` | PTY + SSH session management |
+| `terminals` | Local PTY session management + WebSocket I/O |
 | `remote` | WebRTC signaling + input event pipeline |
 
 ## Data models
@@ -87,6 +87,67 @@ class AgentMessage(models.Model):
 ```
 
 Persist streamed events for history reload; live stream still goes over WebSocket.
+
+### `Terminal`
+
+```python
+class TerminalStatus(models.TextChoices):
+    ACTIVE = "active"
+    CLOSED = "closed"
+
+class Terminal(models.Model):
+    device = models.ForeignKey(DeviceIdentifier, on_delete=models.CASCADE)
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE)
+    name = models.CharField(max_length=128)  # display label, e.g. "powershell"
+    shell = models.CharField(max_length=32, default="powershell")  # powershell | cmd
+    cwd = models.TextField()  # absolute path at create time; server chdirs on spawn
+    cols = models.PositiveSmallIntegerField(default=80)
+    rows = models.PositiveSmallIntegerField(default=24)
+    pid = models.IntegerField(null=True, blank=True)  # OS process id while status=active
+    status = models.CharField(max_length=16, choices=TerminalStatus.choices, default=TerminalStatus.ACTIVE)
+    last_used = models.DateTimeField(auto_now=True)  # bumped on WS I/O, exec, attach
+    created_at = models.DateTimeField(auto_now_add=True)
+```
+
+Rules:
+
+- Sessions are **local shells only** — spawned on the Windows host by Django; no outbound SSH, no `cloudflared` on clients.
+- `cwd` defaults to `workspace.absolute_path` on create; server runs `cd` into that directory before handing control to the PTY.
+- `status=active` while PTY is running; set `closed` when the process exits, client deletes, or idle TTL fires.
+- `last_used` updates on: WebSocket connect, `input`/`output`, `POST /terminals/{id}/exec/`, and successful `resize`.
+- One device may have many terminals; Flutter lists via REST and attaches one WebSocket per open tab.
+- `DELETE /terminals/{id}/` kills the PTY (if `active`) and sets `status=closed` (row retained until optional purge).
+
+### Idle terminal cleanup (1 hour)
+
+Constant: `TERMINAL_IDLE_TTL = timedelta(hours=1)`.
+
+**Every Terminal REST handler** calls `close_stale_terminals(device, workspace_id)` before doing work:
+
+```python
+def close_stale_terminals(*, device: DeviceIdentifier, workspace_id: int | None = None) -> int:
+    cutoff = timezone.now() - settings.TERMINAL_IDLE_TTL
+    qs = Terminal.objects.filter(
+        device=device,
+        status=TerminalStatus.ACTIVE,
+        last_used__lt=cutoff,
+    )
+    if workspace_id is not None:
+        qs = qs.filter(workspace_id=workspace_id)
+    closed = 0
+    for terminal in qs:
+        PtyManager.kill(terminal.pid)
+        terminal.pid = None
+        terminal.status = TerminalStatus.CLOSED
+        terminal.save(update_fields=["pid", "status"])
+        closed += 1
+    return closed
+```
+
+Apply in: `GET/POST /terminals/`, `GET/PATCH/DELETE /terminals/{id}/`, `POST /terminals/{id}/exec/`, and at the start of `TerminalConsumer.connect()`.
+
+- Stale terminals are **closed** (PTY killed), not deleted — list endpoints may filter `status=active` by default with `?include_closed=1` optional.
+- WebSocket attach to a terminal closed by TTL → server sends `error` `{ "code": "terminal_closed", "message": "idle timeout" }` and closes with `4403`.
 
 ## Authentication & middleware
 
@@ -247,15 +308,52 @@ All routes scoped to `workspace_id`; execute git in `workspace.absolute_path`.
 | POST | `/git/checkout/` | `{ "branch" }` | branch switch (Select button) |
 | GET | `/git/log/` | `limit` | commit history graph rows |
 
-### Terminals (HTTP metadata)
+### Terminals (HTTP — create, list, manage, one-shot exec)
 
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/terminals/` | List sessions |
-| POST | `/terminals/` | Create `{ "type": "local|ssh", "name", "ssh_host?", "ssh_user?" }` |
-| DELETE | `/terminals/{id}/` | Kill session |
+All routes require `X-Workspace-Id` (or `workspace_id` in body). **Each handler runs `close_stale_terminals()` first** (1 h idle). Interactive I/O uses WebSocket (below).
 
-PTY I/O is WebSocket.
+| Method | Path | Body | Response |
+| --- | --- | --- | --- |
+| GET | `/terminals/` | — | `[{ "id", "name", "shell", "cwd", "status", "pid", "cols", "rows", "last_used", "created_at" }]` — default `status=active` only; `?include_closed=1` for all |
+| POST | `/terminals/` | `{ "name?", "shell?", "cwd?", "cols?", "rows?" }` | `{ "id", ... }` — creates row `status=active`; PTY starts on first WebSocket connect |
+| GET | `/terminals/{id}/` | — | Terminal detail; `404` if closed and not `include_closed` |
+| PATCH | `/terminals/{id}/` | `{ "name", "cols", "rows" }` | Rename or resize metadata (live resize via WS preferred); `409` if `status=closed` |
+| DELETE | `/terminals/{id}/` | — | Kill PTY if `active`, set `status=closed` |
+| POST | `/terminals/{id}/exec/` | `{ "command", "timeout_ms?", "cwd?" }` | One-shot command; bumps `last_used`; `409` if `status=closed` |
+
+**`POST /terminals/` defaults:**
+
+| Field | Default |
+| --- | --- |
+| `name` | `shell` value or `"Terminal N"` |
+| `shell` | `"powershell"` |
+| `cwd` | active workspace `absolute_path` |
+| `cols` / `rows` | `80` / `24` |
+
+**`POST /terminals/{id}/exec/`** — run a single command without opening the interactive WebSocket (agent helpers, quick checks):
+
+Request:
+
+```json
+{ "command": "git status --short", "timeout_ms": 30000, "cwd": "C:/dev/project" }
+```
+
+Response:
+
+```json
+{
+  "exit_code": 0,
+  "stdout": "...",
+  "stderr": "",
+  "duration_ms": 142
+}
+```
+
+- Spawns `shell -NoProfile -Command` (PowerShell) or `cmd /c` in `cwd` under workspace sandbox.
+- Does not require an active WebSocket; may reuse an idle session row or spawn ephemeral subprocess.
+- `timeout_ms` default `30000`; `408` on timeout with partial output.
+
+PTY attach/detach and streaming are **not** HTTP — use `/ws/terminals/{id}/`.
 
 ## WebSocket endpoints
 
@@ -295,16 +393,59 @@ Use `async for` with short `asyncio.sleep(0)` yields if event loop starvation ap
 
 **Consumer:** `terminals.consumers.TerminalConsumer`
 
-| Direction | Event |
+**Auth:** same as other sockets — `api_key` + `device_hash` + `workspace_id` in query or first frame.
+
+**Lifecycle:**
+
+1. Handler or consumer calls `close_stale_terminals()` (idle > 1 h → kill PTY, `status=closed`).
+2. Client opens WebSocket after `POST /terminals/` (or reconnects to existing `id` with `status=active`).
+3. Server spawns ConPTY (`pywinpty`) if `pid` is null: `shell` from row, `cwd` = workspace path; sets `pid`, `status=active`, `last_used=now`.
+4. Server sends `attached` with `{ "cols", "rows", "cwd", "shell", "pid", "status" }`.
+5. Bidirectional streaming until process exit, `DELETE`, or idle TTL.
+6. On PTY exit: `status=closed`, `pid=null`; server sends `exit` `{ "code" }`.
+
+| Client → server | Payload |
 | --- | --- |
-| Client → | `input` (bytes base64), `resize` `{cols, rows}` |
-| Server → | `output` (bytes base64), `exit` `{code}` |
+| `auth` | `{ "api_key", "device_hash", "workspace_id" }` if not in middleware |
+| `input` | `{ "data": "<base64>" }` — keystrokes/paste; bumps `last_used` |
+| `resize` | `{ "cols", "rows" }` — bumps `last_used` |
+| `signal` | `{ "name": "SIGINT" }` — optional interrupt |
 
-**SSH behavior (wireframe):**
+| Server → client | Payload |
+| --- | --- |
+| `attached` | `{ "cols", "rows", "cwd", "shell", "pid", "status" }` |
+| `output` | `{ "data": "<base64>" }` — PTY stdout+stderr combined; bumps `last_used` |
+| `exit` | `{ "code" }` — then `status=closed` on server |
+| `error` | `{ "code", "message" }` — e.g. `terminal_closed` after idle TTL |
 
-- On `type: "ssh"` session create, connect with stored credentials or key.
-- After connect, run `cd <workspace.absolute_path>` automatically.
-- Expose + / trash via REST delete.
+**Implementation sketch:**
+
+```python
+class TerminalConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        session = await self.get_session()
+        self.pty = await PtyManager.spawn(
+            shell=session.shell,
+            cwd=session.workspace.absolute_path,
+            cols=session.cols,
+            rows=session.rows,
+        )
+        await self.accept()
+        await self.send_json({"type": "attached", ...})
+        asyncio.create_task(self.pump_pty_output())
+
+    async def receive_json(self, content):
+        if content["type"] == "input":
+            self.pty.write(base64.b64decode(content["data"]))
+        elif content["type"] == "resize":
+            self.pty.set_size(content["cols"], content["rows"])
+```
+
+- Run PTY read loop in a thread or `asyncio.to_thread` — Windows ConPTY is blocking.
+- On disconnect, **keep PTY running** (`status` stays `active`) unless `DELETE` or idle TTL fires — user can reattach and refresh `last_used`.
+- Mobile app uses `ghostty_vte_flutter` or `xterm` — decode `output` frames into the terminal view.
+
+**Public access:** clients connect to `wss://{SERVER_DOMAIN}/ws/terminals/{id}/` through the same HTTPS tunnel as the REST API. No separate SSH hostname or client-side tunnel binary.
 
 ### `/ws/remote/`
 
@@ -395,6 +536,7 @@ Reference: [cursor-sdk.md](../third-party-docs/cursor-sdk.md) — `Agent.resume`
 | 403 | `path_not_allowed` | Outside exposed directories |
 | 404 | `workspace_not_found` | |
 | 409 | `agent_busy` | Cursor run in progress |
+| 409 | `terminal_closed` | Terminal `status=closed` |
 | 503 | `cursor_unavailable` | Bridge failed to start |
 
 ## Admin

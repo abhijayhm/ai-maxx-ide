@@ -59,11 +59,9 @@ Optional:
 
 | Package | Role | Why |
 | --- | --- | --- |
-| `pywinpty` / `winpty` | Windows ConPTY | Native Windows pseudoterminal |
-| `asyncssh` | SSH client sessions | Async-friendly; auto `cd` after connect |
-| `pexpect` | Alternative SSH | Heavier; use if asyncssh insufficient |
+| `pywinpty` / `winpty` | Windows ConPTY | Native Windows pseudoterminal for local shells |
 
-**Not chosen:** pure `paramiko` — blocking unless wrapped; prefer `asyncssh` in Channels consumer.
+Interactive I/O is WebSocket-only; one-shot commands use `POST /api/terminals/{id}/exec/`.
 
 ### Files & search
 
@@ -77,14 +75,6 @@ Server grep: invoke `rg` if on PATH, else `grep -R` — no `ripgrep-py` binding 
 ### Git
 
 Use system `git` via `subprocess` — matches user config, credentials, and hooks. No extra package.
-
-### Scripts (`scripts/windows/`)
-
-| Package | Role |
-| --- | --- |
-| `flask` | Only for tunnel setup smoke test `app.py` scaffold |
-
-Production server replaces Flask stub.
 
 ---
 
@@ -203,16 +193,6 @@ Server image installs: `git`, `ripgrep`, `cursor-sdk` wheel deps. **Does not** i
 
 ---
 
-## scripts/windows
-
-| Dependency | Role |
-| --- | --- |
-| `cloudflared` | Tunnel binary (downloaded by script) |
-| Windows OpenSSH Server | Optional SSH ingress |
-| Python 3.10+ stdlib | Setup script |
-
----
-
 ## Version lock strategy
 
 1. **Server:** `requirements.lock` or `uv.lock` generated in CI; pin `cursor-sdk` minor.
@@ -228,6 +208,7 @@ Server image installs: `git`, `ripgrep`, `cursor-sdk` wheel deps. **Does not** i
 | Agent | `cursor-sdk` local | Raw REST `/v1/agents` only |
 | Remote video | aiortc + flutter_webrtc | MJPEG HTTP stream (higher latency) |
 | Remote input | pynput | pyautogui, SendInput ctypes |
+| Terminal access | WSS + ConPTY (`pywinpty`) | External SSH / `asyncssh` |
 | Terminal UI | ghostty_vte_flutter | xterm only (acceptable fallback) |
 | Workbench icons | vendored codicon | discontinued `codicon` pub package |
 | File icons | vscode_material_icon_theme | mixed icon packs |

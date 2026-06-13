@@ -4,24 +4,19 @@ Definition document for the **ai-maxx-ide** monorepo. This file is the source of
 
 ## Intent
 
-A Windows workstation runs the **server** (Django + Channels + Cursor SDK + remote desktop). A **Flutter mobile app** connects over HTTPS/WSS through a **Cloudflare Tunnel**. Local setup scripts live under `scripts/windows/`. Container packaging lives under `docker/`.
+A Windows workstation runs the **server** (Django + Channels + Cursor SDK + remote desktop + local terminal PTYs). A **Flutter mobile app** connects over **HTTPS/WSS** to a public hostname (typically via an external Cloudflare Tunnel you configure yourself). Container packaging lives under `docker/`.
 
 ```
 ai-maxx-ide/
 ├── app/                          # Flutter mobile IDE client
 ├── server/                       # Django ASGI backend (API + WebSockets)
 ├── docker/                       # Compose, images, deployment helpers
-├── scripts/
-│   └── windows/
-│       ├── setup_cloudflare_tunnel.bat  # Windows entry point (run as admin)
-│       ├── setup_cloudflare_tunnel.py   # Cloudflare + SSH bootstrap logic
-│       └── README.md
 ├── docs/
 │   ├── designs/design.md         # Visual language (VS Code dark workbench)
 │   ├── wireframes/wireframes_v4.html
 │   ├── third-party-docs/cursor-sdk.md
 │   └── plan/                     # ← implementation definitions (this folder)
-├── sample.env                      # Env template — copy to .env (never commit .env)
+├── sample.env                    # Env template — copy to .env (never commit .env)
 ├── .gitignore
 ```
 
@@ -34,16 +29,15 @@ flowchart LR
     LocalIdx[Local SQLite index]
   end
 
-  subgraph cf [Cloudflare Tunnel]
+  subgraph edge [Public HTTPS edge]
     AppHost[app.example.com]
-    SSHHost[ssh.example.com]
   end
 
   subgraph win [Windows host]
     Django[Django + Channels]
     Cursor[Cursor SDK local agent]
     Remote[aiortc screen + pynput input]
-    OpenSSH[OpenSSH Server :22]
+    PTY[ConPTY shells]
     Workspaces[Exposed directories]
   end
 
@@ -51,56 +45,26 @@ flowchart LR
   AppHost --> Django
   Django --> Cursor
   Django --> Remote
+  Django --> PTY
   Django --> Workspaces
-  SSHHost --> OpenSSH
 ```
 
 | Surface | Protocol | Purpose |
 | --- | --- | --- |
-| REST API | HTTPS | Auth, workspaces, files, git, search proxy |
+| REST API | HTTPS | Auth, workspaces, files, git, search, terminal CRUD + exec |
 | Agent socket | WSS | Cursor agent message stream |
 | Remote socket | WSS + WebRTC | Screen relay signaling + input events |
-| Terminal socket | WSS | PTY sessions (local shell + SSH-backed) |
-| SSH (optional) | TCP via Cloudflare | Direct terminal access from dev machines |
+| Terminal socket | WSS | Interactive local shell PTY (create/manage via REST) |
 
-## `scripts/windows/`
+**No raw SSH ingress.** Terminals are local Windows shells proxied over `wss://{SERVER_DOMAIN}/ws/terminals/{id}/`. Clients need only HTTPS — no `cloudflared` on phones or laptops.
 
-### `setup_cloudflare_tunnel.bat`
+## Public exposure (out of repo)
 
-Windows entry point. Double-click or run from cmd; re-launches elevated when needed (OpenSSH + machine `PATH` require admin). Resolves Python 3.10+ via `py -3` or `python`, then runs `setup_cloudflare_tunnel.py`.
+Expose `127.0.0.1:{BIND_PORT}` with your own Cloudflare Tunnel, reverse proxy, or VPN. This repo does not ship tunnel bootstrap scripts. Minimum ingress:
 
-### `setup_cloudflare_tunnel.py`
-
-Rerun-safe bootstrap logic (invoked by the `.bat` file). Reads **`{repo}/.env`** (copy from `sample.env`). No interactive domain prompts.
-
-**Tunnel hostnames (default: 2 + optional extras):**
-
-| Source in `.env` | Tunnel ingress |
+| Hostname | Backend |
 | --- | --- |
-| `SERVER_DOMAIN` | `http://127.0.0.1:{LOCAL_SERVER_PORT}` (Django API + WSS) |
-| `SSH_DOMAIN` | `ssh://localhost:22` |
-| `TUNNEL_EXTRA_INGRESS` (JSON array) | Additional `{hostname, service}` pairs |
-
-DNS routes are created for **every** ingress hostname. Responsibilities:
-
-1. Download/install `cloudflared.exe` to `C:\cloudflared` and append to machine `PATH`.
-2. Ensure **OpenSSH Server** on Windows (install capability, start `sshd`, firewall rule on 22).
-3. Interactive Cloudflare login (`cloudflared tunnel login`) if `~/.cloudflared/cert.pem` missing.
-4. Create named tunnel (`TUNNEL_NAME` from `.env`) + write `~/.cloudflared/config.yml` from `.env` hostnames.
-5. DNS routes for each ingress hostname.
-6. Optional Windows service install when `INSTALL_CLOUDFLARED_SERVICE=true`.
-7. Optional SSH client config when `SSH_USERNAME` is set (`ProxyCommand cloudflared access ssh`).
-8. Optional Flask smoke-test `scripts/windows/app.py` when `SKIP_FLASK_SMOKE_TEST=false`.
-
-**Production note:** Django binds `127.0.0.1:{LOCAL_SERVER_PORT}` (default `8000`). Same `.env` keys are used by `server/` later.
-
-### Future scripts (not in scope yet)
-
-| Script | Purpose |
-| --- | --- |
-| `install_server.ps1` | venv, pip install, migrate, collectstatic |
-| `register_device.ps1` | Admin helper to approve a device hash |
-| `run_dev.ps1` | uvicorn/daphne + cloudflared in one dev session |
+| `SERVER_DOMAIN` | `http://127.0.0.1:8000` (Django ASGI) |
 
 ## `docker/`
 
@@ -128,7 +92,6 @@ docker/
 server/
 ├── manage.py
 ├── pyproject.toml              # or requirements.txt
-├── .env.example
 ├── config/
 │   ├── settings/
 │   │   ├── base.py
@@ -156,8 +119,10 @@ server/
 │   ├── views.py                # status, stage, commit, branches, log
 │   └── runner.py               # subprocess git with workspace cwd
 ├── terminals/
-│   ├── consumers.py            # PTY WebSocket
-│   └── ssh.py                  # SSH session spawn + auto cd
+│   ├── consumers.py            # PTY WebSocket consumer
+│   ├── pty_manager.py          # ConPTY spawn, resize, kill
+│   ├── views.py                # REST CRUD + exec
+│   └── models.py               # Terminal
 ├── remote/
 │   ├── consumers.py            # WebRTC signaling + input WS
 │   ├── screen.py               # mss + aiortc VideoStreamTrack
@@ -167,24 +132,19 @@ server/
 
 ### Server `.env` (required keys)
 
-Copy `sample.env` → `.env` at repo root. Tunnel setup and Django share this file.
+Copy `sample.env` → `.env` at repo root.
 
-| Variable | Used by | Description |
-| --- | --- | --- |
-| `SERVER_DOMAIN` | tunnel, app, server | Full public API hostname (e.g. `app.example.com`) |
-| `SSH_DOMAIN` | tunnel, server | Full public SSH hostname (e.g. `ssh.example.com`) |
-| `TUNNEL_NAME` | tunnel | cloudflared tunnel name |
-| `LOCAL_SERVER_PORT` | tunnel, server | Local bind port (default `8000`) |
-| `TUNNEL_EXTRA_INGRESS` | tunnel | Optional JSON `[{hostname, service}, ...]` |
-| `SSH_USERNAME` | tunnel | Optional `~/.ssh/config` entry for `SSH_DOMAIN` |
-| `INSTALL_CLOUDFLARED_SERVICE` | tunnel | `true` to install cloudflared as Windows service |
-| `SKIP_FLASK_SMOKE_TEST` | tunnel | `true` (default) skips Flask smoke-test app |
-| `CURSOR_API_KEY` | server | Cursor SDK user/service key |
-| `API_KEY` | server | Shared secret mobile clients send as `X-API-Key` |
-| `EXPOSED_DIRECTORIES_ABSOLUTE_PATHS` | server | JSON array of allowed workspace roots |
-| `DJANGO_SECRET_KEY` | server | Standard Django secret |
-| `REDIS_URL` | server | Channels layer (if not in-memory dev) |
-| `DATABASE_URL` | server | SQLite dev; Postgres prod optional |
+| Variable | Description |
+| --- | --- |
+| `SERVER_DOMAIN` | Public API hostname the app uses (e.g. `app.example.com`) |
+| `BIND_HOST` | Local bind address (default `127.0.0.1`) |
+| `BIND_PORT` | Local bind port (default `8000`) |
+| `CURSOR_API_KEY` | Cursor SDK user/service key |
+| `API_KEY` | Shared secret mobile clients send as `X-API-Key` |
+| `EXPOSED_DIRECTORIES_ABSOLUTE_PATHS` | JSON array of allowed workspace roots |
+| `DJANGO_SECRET_KEY` | Standard Django secret |
+| `REDIS_URL` | Channels layer (if not in-memory dev) |
+| `DATABASE_URL` | SQLite dev; Postgres prod optional |
 
 ## `app/`
 
@@ -272,9 +232,9 @@ After `POST /api/workspaces/` + client-side Cursor workspace bind, enable full t
 
 | Phase | Deliverable |
 | --- | --- |
-| P0 | `scripts/windows` tunnel + Django skeleton + device auth |
+| P0 | Django skeleton + device auth + `.env` |
 | P1 | Workspace/files/git REST + hamburger menu in Flutter |
 | P2 | Agent WebSocket + Projects tab composer |
-| P3 | Terminals PTY + SSH |
+| P3 | Terminals REST + PTY WebSocket |
 | P4 | Remote WebRTC screen + input staging |
 | P5 | Local search index + grep + file reference UX |

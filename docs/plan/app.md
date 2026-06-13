@@ -10,7 +10,7 @@ A VS Code–inspired dark workbench on phone/tablet that:
 2. Requires workspace selection before main IDE tabs unlock.
 3. Searches files locally (synced index) with server fallback.
 4. Streams Cursor agent responses in the Projects tab.
-5. Manages terminals (local + SSH) on the Terminals tab.
+5. Manages local shell terminals on the Terminals tab (REST + WebSocket).
 6. Views and controls the Windows desktop on the Remote tab.
 7. Opens hamburger panels for workspace tree + git operations.
 
@@ -198,7 +198,10 @@ Render streamed WS events:
 - Main: `GhosttyTerminalView` or `xterm` bound to `WS /ws/terminals/{id}/`.
 - Selected terminal bar: green dot, label, + new, trash delete.
 - Session list: alternating `bg.canvas` / `bg.chrome` rows.
-- SSH sessions: create via REST; server auto-`cd` to workspace.
+- **Create:** `POST /api/terminals/` → open WebSocket on returned `id`.
+- **Delete:** `DELETE /api/terminals/{id}/` from trash icon.
+- Server spawns local PowerShell/cmd in workspace `cwd`; no external SSH.
+- Reconnect: same `id` reattaches if PTY still running.
 
 ---
 
