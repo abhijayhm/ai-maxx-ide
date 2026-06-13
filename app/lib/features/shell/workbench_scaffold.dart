@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/app_providers.dart';
+import '../../core/providers/sync_provider.dart';
 import '../../theme/workbench_colors.dart';
 import '../../widgets/workbench_search_field.dart';
 
@@ -22,6 +23,7 @@ class WorkbenchScaffold extends ConsumerWidget {
     final colors = context.workbenchColors;
     final session = ref.watch(sessionProvider).valueOrNull;
     final isReady = session?.isReady ?? false;
+    final sync = ref.watch(workspaceSyncProvider);
     final location = GoRouterState.of(context).matchedLocation;
     final onMenu = location.startsWith('/menu');
     final showShellChrome = !onMenu;
@@ -35,6 +37,7 @@ class WorkbenchScaffold extends ConsumerWidget {
             if (showShellChrome)
               _WorkbenchHeader(
                 onMenuTap: () => context.push('/menu/workspace'),
+                syncLabel: sync.isActive ? sync.statusLabel : null,
               ),
             Expanded(child: child),
             if (showShellChrome)
@@ -72,9 +75,13 @@ class _TabSpec {
 }
 
 class _WorkbenchHeader extends StatelessWidget {
-  const _WorkbenchHeader({required this.onMenuTap});
+  const _WorkbenchHeader({
+    required this.onMenuTap,
+    this.syncLabel,
+  });
 
   final VoidCallback onMenuTap;
+  final String? syncLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -97,6 +104,13 @@ class _WorkbenchHeader extends StatelessWidget {
           const Expanded(
             child: WorkbenchSearchField(),
           ),
+          if (syncLabel != null && syncLabel!.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Text(
+              syncLabel!,
+              style: TextStyle(color: colors.fgMuted, fontSize: 11),
+            ),
+          ],
         ],
       ),
     );

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from django.conf import settings
 
-from core.utils.paths import get_exposed_roots, resolve_allowed_path
+from core.utils.paths import get_exposed_roots
 
 
 def list_roots():
@@ -74,7 +74,26 @@ def read_file_entry(path: Path) -> dict:
     }
 
 
-def build_sync_tree(path: Path) -> dict:
+def is_within_workspace(path: Path, workspace_root: Path) -> bool:
+    try:
+        path.resolve().relative_to(workspace_root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def inline_sync_policy(size: int) -> str:
+    if size <= settings.FILE_SYNC_INLINE_MAX_BYTES:
+        return "inline"
+    return "metadata_only"
+
+
+def build_sync_tree(path: Path, *, include_content: bool = False) -> dict:
+    """Build workspace sync tree.
+
+    Phase 1 (default): metadata JSON only — no embedded file bodies.
+    Phase 2: client fetches inline bodies via ``POST .../sync/files/``.
+    """
     node = {
         "path": str(path),
         "name": path.name or str(path),
@@ -88,10 +107,8 @@ def build_sync_tree(path: Path) -> dict:
     if path.is_file():
         size = path.stat().st_size
         node["size"] = size
-        node["sync_policy"] = (
-            "inline" if size <= settings.FILE_SYNC_INLINE_MAX_BYTES else "metadata_only"
-        )
-        if node["sync_policy"] == "inline":
+        node["sync_policy"] = inline_sync_policy(size)
+        if include_content and node["sync_policy"] == "inline":
             node["content_base64"] = base64.b64encode(path.read_bytes()).decode("ascii")
         return node
 
@@ -104,11 +121,51 @@ def build_sync_tree(path: Path) -> dict:
         if entry.is_symlink():
             continue
         if entry.is_dir():
-            node["children"].append(build_sync_tree(entry))
+            node["children"].append(build_sync_tree(entry, include_content=include_content))
         else:
-            child = build_sync_tree(entry)
-            node["children"].append(child)
+            node["children"].append(build_sync_tree(entry, include_content=include_content))
     return node
+
+
+def attach_sync_summary(node: dict) -> dict:
+    """Attach roll-up counts on the workspace root for client progress UI."""
+    summary = {
+        "total_nodes": 0,
+        "file_count": 0,
+        "inline_count": 0,
+        "metadata_only_count": 0,
+    }
+
+    def walk(item: dict) -> None:
+        summary["total_nodes"] += 1
+        if item.get("type") == "file":
+            summary["file_count"] += 1
+            if item.get("sync_policy") == "inline":
+                summary["inline_count"] += 1
+            else:
+                summary["metadata_only_count"] += 1
+        for child in item.get("children", []):
+            walk(child)
+
+    walk(node)
+    node["sync_summary"] = summary
+    return node
+
+
+def read_sync_file_entry(path: Path) -> dict:
+    """File payload for background sync phase 2."""
+    stat = path.stat()
+    policy = inline_sync_policy(stat.st_size)
+    entry = {
+        "type": "file",
+        "path": str(path),
+        "size": stat.st_size,
+        "modified_at": _stat_modified(path),
+        "sync_policy": policy,
+    }
+    if policy == "inline":
+        entry["content_base64"] = base64.b64encode(path.read_bytes()).decode("ascii")
+    return entry
 
 
 def search_files(workspace_path: Path, query: str, limit: int = 50) -> list[dict]:

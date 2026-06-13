@@ -97,16 +97,6 @@ def workspace_list_create_view(request):
         defaults={"label": label, "is_active": True},
     )
 
-    from agents.cursor_bridge import bind_cursor_agent
-
-    try:
-        agent_id = bind_cursor_agent(workspace)
-        if agent_id:
-            workspace.cursor_agent_id = agent_id
-            workspace.save(update_fields=["cursor_agent_id", "updated_at"])
-    except Exception:
-        pass
-
     return Response(
         WorkspaceSerializer(workspace).data,
         status=status.HTTP_201_CREATED,

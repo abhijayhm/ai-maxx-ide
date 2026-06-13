@@ -132,3 +132,5 @@ else:
 
 # Large file sync threshold (1 MiB)
 FILE_SYNC_INLINE_MAX_BYTES = 1_048_576
+# Max paths per batch content request during background sync phase 2
+SYNC_FILES_BATCH_MAX_PATHS = 32

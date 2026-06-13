@@ -2,6 +2,7 @@ import mimetypes
 import subprocess
 from pathlib import Path
 
+from django.conf import settings
 from django.http import FileResponse, Http404
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
@@ -13,10 +14,13 @@ from core.models import Workspace
 from core.permissions import IsRegisteredDevice, RequiresWorkspace, get_workspace_from_request
 from core.utils.paths import PathNotAllowedError, resolve_allowed_path
 from files.tree import (
+    attach_sync_summary,
     build_sync_tree,
+    is_within_workspace,
     list_directory,
     list_roots,
     read_file_entry,
+    read_sync_file_entry,
     search_files,
 )
 
@@ -114,6 +118,7 @@ def files_touch_view(request):
 @authentication_classes([DeviceAPIKeyAuthentication])
 @permission_classes([IsRegisteredDevice])
 def workspace_sync_view(request, workspace_id):
+    """Phase 1 sync: metadata-only workspace tree (fast JSON snapshot)."""
     device = request.user
     try:
         workspace = Workspace.objects.get(id=workspace_id, device=device, is_active=True)
@@ -126,7 +131,104 @@ def workspace_sync_view(request, workspace_id):
     if not root.exists():
         return error_response("not_found", "Workspace path not found.", status.HTTP_404_NOT_FOUND)
 
-    return Response(build_sync_tree(root))
+    include_content = request.query_params.get("include_content", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    tree = build_sync_tree(root, include_content=include_content)
+    return Response(attach_sync_summary(tree))
+
+
+@api_view(["POST"])
+@authentication_classes([DeviceAPIKeyAuthentication])
+@permission_classes([IsRegisteredDevice])
+def workspace_sync_files_view(request, workspace_id):
+    """Phase 2 sync: fetch inline file bodies for a batch of workspace paths."""
+    device = request.user
+    try:
+        workspace = Workspace.objects.get(id=workspace_id, device=device, is_active=True)
+    except Workspace.DoesNotExist:
+        return error_response(
+            "workspace_not_found", "Workspace not found.", status.HTTP_404_NOT_FOUND
+        )
+
+    paths = request.data.get("paths")
+    if not isinstance(paths, list) or not paths:
+        return error_response(
+            "invalid_request",
+            "paths must be a non-empty list.",
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    max_paths = settings.SYNC_FILES_BATCH_MAX_PATHS
+    if len(paths) > max_paths:
+        return error_response(
+            "invalid_request",
+            f"At most {max_paths} paths per request.",
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    workspace_root = Path(workspace.absolute_path)
+    files = []
+    skipped = []
+
+    for raw_path in paths:
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            skipped.append(
+                {
+                    "path": raw_path,
+                    "code": "invalid_path",
+                    "message": "Path must be a non-empty string.",
+                }
+            )
+            continue
+
+        try:
+            path = resolve_allowed_path(raw_path)
+        except PathNotAllowedError as exc:
+            skipped.append(
+                {
+                    "path": raw_path,
+                    "code": "path_not_allowed",
+                    "message": exc.detail,
+                }
+            )
+            continue
+
+        if not is_within_workspace(path, workspace_root):
+            skipped.append(
+                {
+                    "path": raw_path,
+                    "code": "path_not_allowed",
+                    "message": "Path is outside the active workspace.",
+                }
+            )
+            continue
+
+        if not path.is_file():
+            skipped.append(
+                {
+                    "path": raw_path,
+                    "code": "not_a_file",
+                    "message": "Path is not a file.",
+                }
+            )
+            continue
+
+        if path.stat().st_size > settings.FILE_SYNC_INLINE_MAX_BYTES:
+            skipped.append(
+                {
+                    "path": raw_path,
+                    "code": "too_large",
+                    "message": "File exceeds inline sync size limit.",
+                }
+            )
+            continue
+
+        files.append(read_sync_file_entry(path))
+
+    return Response({"files": files, "skipped": skipped})
 
 
 @api_view(["GET"])

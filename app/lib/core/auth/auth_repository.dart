@@ -102,19 +102,6 @@ class AuthRepository {
     );
     final workspace = WorkspaceSummary.fromJson(response.data!);
     await setActiveWorkspace(workspace.id);
-
-    try {
-      await _apiClient.post('workspaces/${workspace.id}/bind-cursor/');
-    } on DioException {
-      // Cursor binding is optional for v1 shell unlock.
-    }
-
-    try {
-      await _apiClient.post('workspaces/${workspace.id}/sync/');
-    } on DioException {
-      // Background sync kickoff; failures are non-fatal for onboarding.
-    }
-
     return workspace;
   }
 
