@@ -1,2 +1,79 @@
-env/
+# --- Secrets & local config (commit sample.env, not .env) ---
 .env
+.env.*
+!.env.docker.example
+!.env*.example
+
+# --- Python virtualenvs ---
+env/
+.venv/
+venv/
+
+# --- Django / server ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+server/.pytest_cache/
+server/.coverage
+server/htmlcov/
+server/.mypy_cache/
+server/.ruff_cache/
+server/staticfiles/
+server/media/
+server/*.log
+
+# SQLite + runtime data (see sample.env DATABASE_URL)
+data/
+*.sqlite3
+*.db
+
+# --- Flutter / app (mobile client) ---
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+app/build/
+app/**/build/
+app/.pub-cache/
+app/.pub/
+app/**/Generated.xcconfig
+app/**/flutter_export_environment.sh
+app/**/Pods/
+app/**/.symlinks/
+app/**/ephemeral/
+app/**/xcuserdata/
+app/**/*.iml
+app/.idea/
+
+# --- Docker local overrides ---
+docker/.env
+
+# --- IDE & OS ---
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Logs & temp ---
+*.log
+tunnel-setup-run.log
+cloudflared-run.log
+tmp/
+temp/
+
+# --- Optional native / heavy deps (local wheels, not vendored) ---
+*.whl

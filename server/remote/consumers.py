@@ -1,0 +1,100 @@
+import json
+
+from channels.generic.websocket import AsyncWebsocketConsumer
+
+from core.models import DeviceIdentifier
+from remote.input_executor import clear_staging, execute_batch, get_staging
+
+
+class RemoteConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.authenticated = self.scope.get("ws_authenticated", False)
+        self.device = self.scope.get("device")
+        await self.accept()
+
+    async def receive(self, text_data=None, bytes_data=None):
+        if text_data is None:
+            return
+        try:
+            content = json.loads(text_data)
+        except json.JSONDecodeError:
+            await self.send_json({"type": "error", "code": "invalid_json", "message": "Invalid JSON"})
+            return
+
+        msg_type = content.get("type")
+
+        if msg_type == "auth":
+            await self._handle_auth(content)
+            return
+
+        if not self.authenticated:
+            await self.close(code=4401)
+            return
+
+        if msg_type in ("offer", "answer", "ice_candidate"):
+            await self._handle_signaling(content)
+        elif msg_type == "input_batch":
+            await self._handle_input_batch(content)
+        elif msg_type == "clear":
+            clear_staging()
+            await self.send_json({"type": "staging_cleared"})
+
+    async def _handle_auth(self, content):
+        from django.conf import settings
+
+        api_key = content.get("api_key", "")
+        device_hash = content.get("device_hash", "")
+
+        if api_key != settings.API_KEY:
+            await self.send_json({"type": "error", "code": "invalid_api_key", "message": "Invalid API key"})
+            await self.close(code=4401)
+            return
+
+        from channels.db import database_sync_to_async
+
+        device = await database_sync_to_async(
+            lambda: DeviceIdentifier.objects.filter(hash=device_hash, is_active=True).first()
+        )()
+        if not device:
+            await self.send_json({"type": "error", "code": "device_not_registered", "message": "Device not registered"})
+            await self.close(code=4401)
+            return
+
+        self.device = device
+        self.authenticated = True
+        await self.send_json({"type": "auth_ok", "connected": True})
+
+    async def _handle_signaling(self, content):
+        msg_type = content.get("type")
+        if msg_type == "offer":
+            await self.send_json(
+                {
+                    "type": "answer",
+                    "sdp": content.get("sdp", ""),
+                    "stub": True,
+                }
+            )
+            await self.send_json({"type": "connected"})
+        elif msg_type == "ice_candidate":
+            await self.send_json({"type": "ice_candidate", "candidate": content.get("candidate")})
+
+    async def _handle_input_batch(self, content):
+        events = content.get("events", [])
+        dispatch = content.get("dispatch", False)
+
+        if not events and not dispatch:
+            clear_staging()
+            await self.send_json({"type": "staging_cleared"})
+            return
+
+        executed = execute_batch(events, dispatch=dispatch)
+        await self.send_json(
+            {
+                "type": "input_executed" if dispatch else "input_staged",
+                "count": len(executed) if dispatch else len(get_staging()),
+                "executed": executed if dispatch else [],
+            }
+        )
+
+    async def send_json(self, content):
+        await self.send(text_data=json.dumps(content))
