@@ -29,7 +29,10 @@
   .wireframe svg{ border:1px solid var(--border-default); border-radius:6px; font-family:var(--font-ui); }
   .docs{ padding:18px 22px; border-top:1px solid var(--border-subtle); }
   .docs h3{ margin-top:0; color:var(--fg-strong); font-size:14px; font-weight:600;}
+  .docs h3 + ul{ margin-top:8px; }
+  .docs h3:not(:first-child){ margin-top:22px; }
   .docs ul{ margin:8px 0 0 18px; padding:0; }
+  .docs ul ul{ margin-top:6px; margin-bottom:6px; }
   .docs li{ margin-bottom:6px; line-height:1.55; font-size:13px; color:var(--fg-default);}
   .tag{ display:inline-block; background:var(--bg-input); color:var(--ai-cmd-fg); border:1px solid var(--border-default); border-radius:4px; padding:1px 6px; font-size:12px; font-family:var(--font-mono); line-height:1.5;}
   .font-ui{ font-family:var(--font-ui); }
@@ -139,7 +142,7 @@
     </svg>
   </div>
   <div class="docs">
-    <h3>Documentation</h3>
+    <h3>Design</h3>
     <ul>
       <li>Surfaces: app frame &amp; chrome use <span class="tag">bg.chrome #181818</span>; the conversation/results area uses <span class="tag">bg.canvas #1F1F1F</span>; cards/responses use <span class="tag">bg.elevated #222222</span> with <span class="tag">border.subtle</span>.</li>
       <li>Header: <span class="tag">&#9776; hamburger</span> (Codicon menu) + search input on <span class="tag">bg.input #313131</span> with <span class="tag">border.default</span>; close (x) and stop (square) icons in <span class="tag">fg.muted</span>.</li>
@@ -147,9 +150,20 @@
       <li>Result list styled as sidebar tree rows (13px workbench UI / monospace for paths), <span class="tag">fg.default</span> text, active-line indicator bar in <span class="tag">accent.primary</span>, line-range badge in <span class="tag">fg.inactive</span>.</li>
       <li><strong>Cursor responses panel:</strong> each block follows AI panel language — file-edit badges use <span class="tag">ai.editedFileFg #E2C08D</span>; slash/tool-command blocks use <span class="tag">ai.commandBg #26477866</span> + <span class="tag">ai.commandFg #85B6FF</span> in monospace; streaming caret in <span class="tag">accent.primary</span>.</li>
       <li><strong>Composer (matches reference):</strong> rounded 8px card on <span class="tag">bg.elevated #222222</span>, <span class="tag">border.default</span>, placeholder "Plan, Build, / for skills, @ for context" in <span class="tag">fg.placeholder #989898</span>. Footer row inside composer holds an <strong>∞</strong> (context/length) pill, an <strong>Auto ⌄</strong> model selector, and attach/mic icons (Codicons, <span class="tag">fg.muted</span>, 16px).</li>
-      <li>Bottom nav tabs: active tab (<strong>Terminals</strong> shown) gets <span class="tag">bg.canvas</span> background + 2px top border in <span class="tag">accent.primary</span> + <span class="tag">fg.strong</span> label; inactive tabs sit on <span class="tag">bg.chrome</span> with <span class="tag">fg.default</span>.</li>
-      <li><strong>Behavior — Projects tab, when searching:</strong> agent window collapses to just the message/composer; the search/results area takes ~60vh.</li>
-      <li><strong>Behavior — referencing files:</strong> when in file-select (incl. full-file select on top), the agent panel takes ~60% and only the search bar stays visible at top. <code>@</code> file-reference still works inside the composer.</li>
+      <li>Bottom nav tabs: active tab gets <span class="tag">bg.canvas</span> background + 2px top border in <span class="tag">accent.primary</span> + <span class="tag">fg.strong</span> label; inactive tabs sit on <span class="tag">bg.chrome</span> with <span class="tag">fg.default</span>.</li>
+    </ul>
+    <h3>Working</h3>
+    <ul>
+      <li>Full-screen layout. Header row contains: <span class="tag">&#9776; hamburger</span> (opens the slide-in menu — see Screens 4 &amp; 5), the <span class="tag">Search Bar</span>, and <span class="tag">Close</span> / <span class="tag">Stop</span> controls at top-right (<strong>Stop</strong> halts an in-progress agent action).</li>
+      <li><span class="tag">Ctrl+A</span> performs "select all" within search results.</li>
+      <li>Below the search bar is a <span class="tag">File search</span> / <span class="tag">grep</span> mode toggle.</li>
+      <li>Search results render in a GitHub-like file list view, supporting <code>.cpp</code> file display. Long-press makes entries selectable, and a selection range can be defined.</li>
+      <li>Below results is a <span class="tag">Cursor responses</span> panel — the main flexible area showing AI/agent responses tied to cursor context, with a vertical scroll indicator on the right edge.</li>
+      <li>The composer pinned above bottom navigation is the agent chat input (replaces the original "Type message" + send affordance).</li>
+      <li>Bottom navigation has three full-width tabs: <strong>Projects</strong>, <strong>Terminals</strong>, <strong>Remote</strong> (consistent across all screens).</li>
+      <li><strong>Behavior — Projects tab, when searching:</strong> the agent window collapses to just the message/composer; the search/results area takes ~60vh.</li>
+      <li><strong>Behavior — when referencing files:</strong> when in file-select (incl. full-file select on top), the agent panel takes ~60% and only the search bar stays visible at top.</li>
+      <li>The <code>@</code> file-reference selector still works inside agent chat (distinct from the cursor-select-vs-reference mechanism described above).</li>
     </ul>
   </div>
 </div>
@@ -209,14 +223,22 @@
     </svg>
   </div>
   <div class="docs">
-    <h3>Documentation</h3>
+    <h3>Design</h3>
     <ul>
       <li>Terminal output region: <span class="tag">bg.canvas #1F1F1F</span>, editor monospace (Consolas / Ubuntu Mono) 13px, <span class="tag">fg.default</span> for normal text, success/output lines in <span class="tag">status.success #2EA043</span>, blinking cursor block in <span class="tag">accent.primary</span>.</li>
       <li><strong>Selected Terminal bar:</strong> <span class="tag">bg.elevated #222222</span> with <span class="tag">border.default</span>; live status dot in <span class="tag">status.success</span>; label in <span class="tag">fg.strong</span>; <strong>+</strong> (new) and trash (delete) Codicons in <span class="tag">fg.muted</span>, 16px.</li>
       <li><strong>Terminal list:</strong> alternating row backgrounds (<span class="tag">bg.canvas</span> / <span class="tag">bg.chrome</span>) matching sidebar tree styling, status dot per session, scrollbar thumb in <span class="tag">bg.input</span>.</li>
       <li>Composer is hidden/dimmed on this tab (dashed placeholder in <span class="tag">border.subtle</span> / <span class="tag">fg.inactive</span>) — not part of the terminal workflow.</li>
-      <li><strong>SSH behavior:</strong> SSH-backed terminals supported with VS-Code-like add/delete controls. After SSH connects, terminal auto-<code>cd</code>s into the current project directory.</li>
       <li>Bottom nav unchanged: active tab indicated with 2px <span class="tag">accent.primary</span> top border + <span class="tag">bg.canvas</span> fill.</li>
+    </ul>
+    <h3>Working</h3>
+    <ul>
+      <li>Same header chrome: <span class="tag">&#9776; hamburger</span> top-left, "Terminals" title.</li>
+      <li>Main pane is a live terminal output area showing a command prompt (<code>C:/ ---&gt;</code>), demonstrated with <code>echo "I'm the best"</code>.</li>
+      <li>Below the output is a <span class="tag">Selected Terminal</span> bar with a <strong>+</strong> (new terminal) and trash (delete terminal) action.</li>
+      <li>A scrollable <strong>terminal list</strong> appears below the selected-terminal bar, allowing switching between multiple open terminal sessions.</li>
+      <li>Bottom navigation: <strong>Projects | Terminals (active) | Remote</strong>.</li>
+      <li><strong>SSH behavior:</strong> terminals support SSH, with VS-Code-like add/delete controls for managing connections. After establishing an SSH session, the terminal automatically navigates (<code>cd</code>) into the current project directory.</li>
     </ul>
   </div>
 </div>
@@ -325,7 +347,7 @@
     </svg>
   </div>
   <div class="docs">
-    <h3>Documentation</h3>
+    <h3>Design</h3>
     <ul>
       <li><strong>Screen with pointer (top ~50%):</strong> rendered on near-black <span class="tag">#0F0F0F</span> (deeper than canvas, to distinguish remote framebuffer from local chrome); remote window chrome mocked with <span class="tag">bg.canvas</span> rectangles and an <span class="tag">ai.commandBg</span> tinted panel; cursor arrow outlined in <span class="tag">accent.primary</span>.</li>
       <li><strong>Controls (bottom ~50%):</strong> panel on <span class="tag">bg.canvas #1F1F1F</span> with <span class="tag">border.subtle</span>.</li>
@@ -333,7 +355,26 @@
       <li><strong>Keyboard tab (right):</strong> reference text block in <span class="tag">fg.default</span>, then three key buttons (<span class="tag">Fn</span>, <span class="tag">$#</span> monospace, <span class="tag">123</span>) styled as secondary buttons on <span class="tag">bg.input</span>.</li>
       <li><strong>Action icons next to keys:</strong> <span class="tag">x</span> (cancel staged input) in <span class="tag">status.error #F85149</span>; <span class="tag">+</span> (compose/add to combo) in <span class="tag">fg.muted</span>; <span class="tag">✓</span> (send keystroke to remote) in <span class="tag">status.success #2EA043</span> — mirrors the diff-preview color convention (added/success = green, destructive = red).</li>
       <li><strong>Sub-tabs (Trackpad | Keyboard):</strong> active tab gets 2px <span class="tag">accent.primary</span> top border + <span class="tag">fg.strong</span> label, matching the main tab-strip pattern.</li>
-      <li><strong>Input trigger flow:</strong> interactions are staged; <strong>x</strong> discards staged input, <strong>+</strong> builds up a combo, <strong>✓</strong> dispatches the composed keystroke/input event to the remote session.</li>
+    </ul>
+    <h3>Working</h3>
+    <ul>
+      <li>Same header chrome: <span class="tag">&#9776; hamburger</span> top-left, "Remote" title.</li>
+      <li>Body splits roughly: <strong>top ~50%</strong> = "Screen with pointer" (the remote desktop/device view, live cursor shown over it), <strong>bottom ~50%</strong> = Controls.</li>
+      <li><strong>Controls area has two sub-tabs at its bottom edge: <span class="tag">Trackpad</span> and <span class="tag">Keyboard</span>.</strong> Only one is shown at a time, swapping the content of the controls panel above the tabs:
+        <ul>
+          <li><strong>Trackpad tab (left wireframe):</strong> shows the Trackpad area plus <strong>Left</strong> / <strong>Right</strong> click buttons.</li>
+          <li><strong>Keyboard tab (right wireframe):</strong> shows the three special-key categories and their buttons:
+            <ul>
+              <li><span class="tag">Fn</span> — special keyboard keys; Fn acts as a shift/modifier layer, etc.</li>
+              <li><span class="tag">$#</span> — special characters</li>
+              <li><span class="tag">123</span> — number row</li>
+            </ul>
+            Alongside the three key buttons are three actions: <span class="tag">x</span>, <span class="tag">+</span>, <span class="tag">&#10003;</span>.
+          </li>
+        </ul>
+      </li>
+      <li><strong>Input trigger flow:</strong> in either tab, interactions are staged (typed/clicked/composed). <strong>x</strong> cancels the staged input without sending. <strong>+</strong> adds/builds up the staged key combination (e.g. composing a modifier + key combo). Pressing <strong>&#10003; (tick)</strong> sends the composed input as actual keystroke/input events to the remote session.</li>
+      <li>Same bottom nav: <strong>Projects | Terminals | Remote (active)</strong>.</li>
     </ul>
   </div>
 </div>
@@ -408,7 +449,7 @@
     </svg>
   </div>
   <div class="docs">
-    <h3>Documentation</h3>
+    <h3>Design</h3>
     <ul>
       <li>Full-screen panel opened via hamburger; top tab strip follows tab-strip rules: active <strong>Workspace</strong> tab gets <span class="tag">bg.canvas</span> fill + 2px <span class="tag">accent.primary</span> top border + <span class="tag">fg.strong</span> label; inactive <strong>Git</strong> tab on <span class="tag">bg.chrome</span> with <span class="tag">fg.muted</span>.</li>
       <li><span class="tag">x</span> close icon top-right in <span class="tag">fg.muted</span>; "git graph" shortcut icon rendered in <span class="tag">ai.commandFg #85B6FF</span> to hint at AI/graph affordance.</li>
@@ -417,6 +458,23 @@
       <li><strong>FTP Navigator:</strong> tree view on <span class="tag">bg.canvas</span>, monospace paths in <span class="tag">fg.default</span>, folders tinted with <span class="tag">ai.editedFileFg #E2C08D</span> for emphasis, files in <span class="tag">fg.muted</span>, scrollbar thumb in <span class="tag">bg.input</span>.</li>
       <li><strong>FTP Path field:</strong> <span class="tag">bg.input</span> input showing the active remote path in monospace.</li>
       <li><strong>Action buttons:</strong> <span class="tag">Select</span> and <span class="tag">+ New folder</span> are secondary buttons (<span class="tag">bg.input</span>/<span class="tag">border.default</span>, hover <span class="tag">bg.input-hover</span>); <span class="tag">+ New file</span> is the primary CTA in <span class="tag">accent.primary</span> with <span class="tag">fg.strong</span> text.</li>
+    </ul>
+    <h3>Working</h3>
+    <ul>
+      <li>This is the full-screen panel opened by the <span class="tag">&#9776; hamburger</span> from any screen — it overlays/replaces the main view. Two top tabs: <strong>Workspace</strong> (active here) and <strong>Git</strong> (Screen 5).</li>
+      <li><span class="tag">x</span> (close) button top-right closes the panel and returns to the previous screen. A small "git graph" indicator sits near the top-right corner as a quick-access shortcut into the Git tab's commit graph.</li>
+      <li><strong>Current workspace ▾</strong> — dropdown selector to switch between workspaces.</li>
+      <li>Below the selector: a list of recent/pinned workspace items.</li>
+      <li><strong>FTP Navigator</strong> — main scrollable area showing the remote file/folder tree for the connected FTP/remote target.</li>
+      <li>Bottom action row:
+        <ul>
+          <li><span class="tag">FTP Path</span> — input field showing/editing the current remote path.</li>
+          <li><span class="tag">Select</span> — choose/confirm the FTP path.</li>
+          <li><span class="tag">+ New folder</span> — create folder at current FTP path.</li>
+          <li><span class="tag">+ New file</span> — create file at current FTP path.</li>
+        </ul>
+      </li>
+      <li>Bottom nav (Projects | Terminals | Remote) remains visible/consistent even while this panel is open.</li>
     </ul>
   </div>
 </div>
@@ -505,7 +563,7 @@
     </svg>
   </div>
   <div class="docs">
-    <h3>Documentation</h3>
+    <h3>Design</h3>
     <ul>
       <li>Tab strip: <strong>Git</strong> active (<span class="tag">bg.canvas</span> + 2px <span class="tag">accent.primary</span> top border + <span class="tag">fg.strong</span>); <strong>Workspace</strong> inactive (<span class="tag">bg.chrome</span> + <span class="tag">fg.muted</span>).</li>
       <li><strong>Commit message input:</strong> <span class="tag">bg.input</span>/<span class="tag">border.default</span>, placeholder in <span class="tag">fg.placeholder</span>; <strong>Commit</strong> is the primary CTA (<span class="tag">accent.primary</span> + <span class="tag">fg.strong</span> + check icon).</li>
@@ -515,6 +573,17 @@
       <li><strong>Command input:</strong> rounded 6px field on <span class="tag">bg.input</span>, monospace placeholder, ⏎ to execute raw git commands.</li>
       <li><strong>Branch selector:</strong> current branch shown in monospace on <span class="tag">bg.input</span> with chevron; <strong>Select</strong> is a primary CTA — pressing it triggers a branch switch.</li>
       <li><strong>Commit history:</strong> vertical graph line in <span class="tag">border.default</span>; HEAD commit dot in <span class="tag">accent.primary</span>, other commits in <span class="tag">fg.inactive #6E7681</span>; subject text in <span class="tag">fg.default</span>, meta (hash/branch/time) in <span class="tag">fg.inactive</span> at 10px.</li>
+    </ul>
+    <h3>Working</h3>
+    <ul>
+      <li>Same full-screen hamburger panel as Screen 4, with the <strong>Git</strong> tab active (Workspace | <strong>Git</strong>).</li>
+      <li><strong>Commit message input</strong> (with ⏎ shortcut) next to a <strong>✓ Commit</strong> button.</li>
+      <li>Quick git actions accessible from this view: <span class="tag">add</span>, <span class="tag">stash</span>, <span class="tag">discard</span>, <span class="tag">commit</span>, <span class="tag">sync</span>.</li>
+      <li><strong>Changed files</strong> — scrollable list of modified files, each with a <strong>+ ⏎</strong> action (stage file).</li>
+      <li><strong>Command input</strong> field (rounded, with ⏎ to execute) — allows running raw git commands.</li>
+      <li><strong>Branch dropdown</strong> ("Branch ▾") on the left and a <strong>Select</strong> button on the right; pressing Select on a chosen branch triggers a branch switch.</li>
+      <li><strong>Commit history</strong> — scrollable git log/graph (e.g., "some commit" + further entries).</li>
+      <li>Same <span class="tag">x</span> close button top-right returns to the previous main screen; bottom nav remains consistent.</li>
     </ul>
   </div>
 </div>
