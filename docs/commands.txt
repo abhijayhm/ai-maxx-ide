@@ -1,0 +1,125 @@
+ai-maxx-ide — command reference (Windows)
+=========================================
+Repo root: C:\all-files\misc\ai-maxx-ide
+Python venv: env\Scripts\activate
+Flutter SDK: C:\flutter\bin  (add to PATH)
+
+App defaults (app/lib/core/config/app_config.dart):
+  Server:  https://aimaxx.organisationapp.online
+  API key: change-me-to-a-long-random-secret  (must match .env API_KEY)
+
+Tunnel must forward SERVER_DOMAIN -> http://127.0.0.1:8000
+Health check: https://aimaxx.organisationapp.online/api/health/
+
+
+--- One-time setup ---
+
+copy sample.env .env
+(edit .env: SERVER_DOMAIN, API_KEY, EXPOSED_DIRECTORIES_ABSOLUTE_PATHS, etc.)
+
+cd server
+..\env\Scripts\pip install -r requirements.txt
+..\env\Scripts\python manage.py migrate
+
+cd ..\app
+C:\flutter\bin\flutter pub get
+
+
+--- Python server (Django) ---
+
+# Activate venv (from repo root)
+env\Scripts\activate
+
+# First run / after model changes
+cd server
+python manage.py migrate
+
+# Dev — quick HTTP (WebSockets limited; OK for admin/REST smoke tests)
+python manage.py runserver 127.0.0.1:8000
+
+# Dev / prod — ASGI (REST + WebSockets; use with Cloudflare tunnel)
+cd server
+..\env\Scripts\uvicorn.exe config.asgi:application --host 127.0.0.1 --port 8000
+
+# Or from repo root with venv active:
+uvicorn config.asgi:application --host 127.0.0.1 --port 8000 --app-dir server
+
+# Tests
+cd server
+..\env\Scripts\python.exe -m pytest tests/ -v
+
+
+--- Flutter — develop & install on device ---
+
+# Prereqs: phone USB debugging on, adb sees device
+adb devices
+C:\flutter\bin\flutter doctor
+
+# From app/
+cd app
+C:\flutter\bin\flutter pub get
+C:\flutter\bin\flutter devices
+
+# Hot-reload dev run (replace DEVICE_ID, e.g. 6000cc2e)
+C:\flutter\bin\flutter run -d DEVICE_ID
+
+# Install debug build without keeping terminal attached (build + install)
+C:\flutter\bin\flutter install -d DEVICE_ID
+
+# Analyze / test
+C:\flutter\bin\flutter analyze
+C:\flutter\bin\flutter test
+
+
+--- Flutter — release APK (installable) ---
+
+cd app
+C:\flutter\bin\flutter pub get
+
+# Build release APK
+C:\flutter\bin\flutter build apk --release
+
+# Output file:
+#   app\build\app\outputs\flutter-apk\app-release.apk
+
+# Install release APK on connected phone
+adb install -r build\app\outputs\flutter-apk\app-release.apk
+
+# Or via Flutter (after build)
+C:\flutter\bin\flutter install -d DEVICE_ID --release
+
+# Smaller per-ABI APKs (optional)
+C:\flutter\bin\flutter build apk --release --split-per-abi
+#   app-arme64-v8a-release.apk  (most modern phones)
+#   adb install -r build\app\outputs\flutter-apk\app-arme64-v8a-release.apk
+
+
+--- Cloudflare tunnel (server URL only) ---
+
+# 1) One-time / rerun setup (Admin — double-click or cmd)
+scripts\windows\setup_cloudflare_tunnel.bat
+
+# Reads repo .env:
+#   SERVER_DOMAIN=aimaxx.organisationapp.online
+#   TUNNEL_NAME=ai-maxx-ide
+#   BIND_PORT=8000
+
+# 2) Start tunnel (separate terminal, after server is on 127.0.0.1:8000)
+cloudflared tunnel run ai-maxx-ide
+
+# Or background helper (starts tunnel if not connected)
+scripts\windows\start_services.bat
+
+# 3) Full dev stack (3 terminals)
+#   Terminal A: uvicorn config.asgi:application --host 127.0.0.1 --port 8000  (in server/)
+#   Terminal B: cloudflared tunnel run ai-maxx-ide
+#   Terminal C: flutter run -d DEVICE_ID  (in app/)
+
+
+--- Quick verify ---
+
+curl https://aimaxx.organisationapp.online/api/health/
+# expect: {"ok":true}
+
+cloudflared tunnel list
+# expect: ai-maxx-ide with CONNECTIONS

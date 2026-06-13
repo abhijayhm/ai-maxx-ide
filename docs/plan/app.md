@@ -315,3 +315,14 @@ WebSocket URL: `wss://{SERVER_DOMAIN}/ws/...` (from env / user settings).
 - On-device code editing (read/search/reference only).
 - Offline agent (requires server).
 - Multi-workspace simultaneous tabs.
+
+## Dev defaults
+
+The Flutter client ships with baked-in development defaults in `app/lib/core/config/app_config.dart`:
+
+| Setting | Value |
+| --- | --- |
+| `SERVER_DOMAIN` | `https://aimaxx.organisationapp.online` |
+| `API_KEY` | `change-me-to-a-long-random-secret` (matches repo root `.env` / `sample.env`) |
+
+The API key can be overridden in the authenticate modal. WebSocket URLs are derived from the server URL (`wss://aimaxx.organisationapp.online/ws/` for the default host).
