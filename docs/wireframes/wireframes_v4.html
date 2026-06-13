@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>App Wireframes v4 — Dark Workbench + Codicons</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;600;700&family=Ubuntu+Mono&family=Droid+Sans+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vscode-codicons@0.0.17/dist/codicon.css">
+<style>
+  :root{
+    --bg-app:#181818; --bg-chrome:#181818; --bg-canvas:#1F1F1F; --bg-elevated:#222222;
+    --bg-input:#313131; --bg-input-hover:#3C3C3C;
+    --border-subtle:#2B2B2B; --border-default:#3C3C3C;
+    --fg-default:#CCCCCC; --fg-strong:#FFFFFF; --fg-muted:#9D9D9D; --fg-inactive:#868686; --fg-placeholder:#989898;
+    --accent-primary:#0078D4; --accent-primary-hover:#026EC1; --accent-secondary:#2488DB; --accent-link:#4DAAFC;
+    --status-error:#F85149; --status-success:#2EA043; --status-warning:#9E6A03;
+    --ai-cmd-bg:#26477866; --ai-cmd-fg:#85B6FF; --ai-edited-fg:#E2C08D;
+    --font-ui: system-ui, -apple-system, "Segoe UI", "SF Pro", Ubuntu, sans-serif;
+    --font-mono: Monaco, Menlo, Consolas, "Droid Sans Mono", "Ubuntu Mono", monospace;
+  }
+  body{ font-family:var(--font-ui); font-size:13px; background:#0e0e0e; margin:0; padding:24px; color:var(--fg-default); }
+  .container{ max-width:1000px; margin:0 auto; }
+  h1{ text-align:center; color:var(--fg-strong); font-weight:600; font-size:14px; }
+  .sub{ text-align:center; color:var(--fg-muted); margin-bottom:32px; font-size:13px;}
+  .screen{ background:var(--bg-elevated); border:1px solid var(--border-default); border-radius:6px; margin-bottom:48px; overflow:hidden; }
+  .screen-header{ background:var(--bg-chrome); color:var(--fg-strong); padding:12px 18px; font-size:14px; font-weight:600; border-bottom:1px solid var(--border-subtle);}
+  .wireframe{ padding:20px; display:flex; justify-content:center; gap:16px; background:#141414; flex-wrap:wrap;}
+  .wireframe svg{ border:1px solid var(--border-default); border-radius:6px; font-family:var(--font-ui); }
+  .docs{ padding:18px 22px; border-top:1px solid var(--border-subtle); }
+  .docs h3{ margin-top:0; color:var(--fg-strong); font-size:14px; font-weight:600;}
+  .docs ul{ margin:8px 0 0 18px; padding:0; }
+  .docs li{ margin-bottom:6px; line-height:1.55; font-size:13px; color:var(--fg-default);}
+  .tag{ display:inline-block; background:var(--bg-input); color:var(--ai-cmd-fg); border:1px solid var(--border-default); border-radius:4px; padding:1px 6px; font-size:12px; font-family:var(--font-mono); line-height:1.5;}
+  .font-ui{ font-family:var(--font-ui); }
+  .font-mono{ font-family:var(--font-mono); line-height:1.5; }
+  .cdc{ font-family:'codicon'; }
+
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Mobile IDE / Agent App — Wireframe Documentation v3</h1>
+<p class="sub">VS Code-inspired Dark Workbench design language applied · full-screen layouts</p>
+
+<!-- SCREEN 1 -->
+<div class="screen">
+  <div class="screen-header">1. Main / Search &amp; Agent Chat Screen</div>
+  <div class="wireframe">
+    <svg viewBox="0 0 360 760" width="320" height="676" xmlns="http://www.w3.org/2000/svg">
+      <rect width="360" height="760" fill="#181818"/>
+      <!-- status bar -->
+      <text x="20" y="24" font-size="11" fill="#9D9D9D" class="font-ui">9:41</text>
+      <text x="320" y="24" font-size="11" fill="#9D9D9D" text-anchor="end" class="font-ui">100%</text>
+
+      <!-- header -->
+      <rect x="0" y="36" width="360" height="44" fill="#181818"/>
+      <line x1="0" y1="80" x2="360" y2="80" stroke="#2B2B2B"/>
+      <!-- hamburger icon -->
+      <text x="20" y="65" font-size="18" fill="#CCCCCC" class="cdc">&#xeb94;</text>
+      <!-- search bar -->
+      <rect x="50" y="46" width="222" height="28" rx="4" fill="#313131" stroke="#3C3C3C"/>
+      <text x="58" y="66" font-size="14" fill="#989898" class="cdc">&#xea6d;</text>
+      <text x="78" y="64" font-size="12" fill="#989898" class="font-ui">Search</text>
+      <!-- close / stop icons -->
+      <text x="288" y="67" font-size="15" fill="#9D9D9D" class="cdc">&#xea76;</text>
+      <text x="310" y="67" font-size="15" fill="#9D9D9D" class="cdc">&#xeba5;</text>
+
+      <!-- file search / grep toggle -->
+      <rect x="20" y="92" width="150" height="26" rx="4" fill="#0078D4" stroke="#0078D4"/>
+      <text x="35" y="109" font-size="12" fill="#FFFFFF" class="font-ui" font-weight="500">File search</text>
+      <rect x="175" y="92" width="160" height="26" rx="4" fill="#313131" stroke="#3C3C3C"/>
+      <text x="190" y="109" font-size="12" fill="#CCCCCC" class="font-mono">grep</text>
+
+      <!-- result list (file rows like sidebar tree) -->
+      <line x1="20" y1="134" x2="340" y2="134" stroke="#2B2B2B"/>
+      <g class="font-mono" font-size="12" fill="#CCCCCC">
+        <text x="34" y="156">main.py</text>
+        <text x="34" y="180">utils/parser.cpp</text>
+        <text x="34" y="204">routes/agent.py</text>
+        <text x="34" y="228">README.md</text>
+        <text x="34" y="252">config.json</text>
+      </g>
+      <g fill="#6E7681" font-size="12">
+        <rect x="20" y="144" width="3" height="14" fill="#0078D4"/>
+        <rect x="20" y="168" width="3" height="14" fill="none"/>
+        <rect x="20" y="192" width="3" height="14" fill="none"/>
+        <rect x="20" y="216" width="3" height="14" fill="none"/>
+        <rect x="20" y="240" width="3" height="14" fill="none"/>
+      </g>
+      <text x="320" y="156" font-size="10" fill="#6E7681" text-anchor="end">L1-42</text>
+      <line x1="0" y1="266" x2="360" y2="266" stroke="#2B2B2B"/>
+
+      <!-- cursor responses / conversation area -->
+      <text x="20" y="288" font-size="12" fill="#9D9D9D" class="font-ui" font-weight="500">CURSOR RESPONSES</text>
+      <rect x="20" y="298" width="320" height="60" rx="4" fill="#1F1F1F" stroke="#2B2B2B"/>
+      <text x="32" y="318" font-size="12" fill="#CCCCCC" class="font-ui">Refactored parser to stream tokens</text>
+      <rect x="32" y="328" width="120" height="20" rx="3" fill="#313131" stroke="#3C3C3C"/>
+      <text x="38" y="342" font-size="11" fill="#E2C08D" class="font-mono">parser.cpp ~modified</text>
+
+      <rect x="20" y="368" width="320" height="60" rx="4" fill="#26477866" stroke="#2B2B2B"/>
+      <text x="32" y="388" font-size="12" fill="#85B6FF" class="font-mono">/run tests --watch</text>
+      <text x="32" y="408" font-size="11" fill="#9D9D9D" class="font-ui">Tool execution · terminal</text>
+
+      <rect x="20" y="438" width="320" height="90" rx="4" fill="#1F1F1F" stroke="#2B2B2B"/>
+      <text x="32" y="458" font-size="12" fill="#CCCCCC" class="font-ui">Streaming response</text>
+      <line x1="32" y1="474" x2="300" y2="474" stroke="#3C3C3C"/>
+      <line x1="32" y1="492" x2="260" y2="492" stroke="#3C3C3C"/>
+      <rect x="32" y="505" width="2" height="14" fill="#0078D4"/>
+      <text x="42" y="517" font-size="11" fill="#9D9D9D" class="font-ui">typing…</text>
+
+      <rect x="335" y="298" width="6" height="230" fill="#313131" rx="3"/>
+      <line x1="0" y1="630" x2="360" y2="630" stroke="#2B2B2B"/>
+
+      <!-- composer (per reference image) -->
+      <rect x="16" y="642" width="328" height="78" rx="8" fill="#222222" stroke="#3C3C3C"/>
+      <text x="30" y="666" font-size="12" fill="#989898" class="font-ui">Plan, Build, / for skills, @ for context</text>
+      <line x1="16" y1="694" x2="344" y2="694" stroke="#2B2B2B"/>
+      <!-- infinity / Auto chips -->
+      <rect x="28" y="700" width="44" height="20" rx="10" fill="none" stroke="#3C3C3C"/>
+      <text x="42" y="714" font-size="12" fill="#9D9D9D" class="font-ui">∞</text>
+      <text x="84" y="714" font-size="12" fill="#CCCCCC" class="font-ui" font-weight="500">Auto ⌄</text>
+      <!-- attach + mic icons -->
+      <text x="296" y="717" font-size="15" fill="#9D9D9D" class="cdc">&#xeb6f;</text>
+      <circle cx="330" cy="710" r="10" fill="#3C3C3C"/>
+      <text x="323" y="716" font-size="13" fill="#CCCCCC" class="cdc">&#xea96;</text>
+
+      <line x1="0" y1="712" x2="360" y2="712" stroke="transparent"/>
+      <line x1="0" y1="730" x2="360" y2="730" stroke="#2B2B2B"/>
+
+      <!-- bottom tabs -->
+      <rect x="0" y="730" width="120" height="30" fill="#181818"/>
+      <text x="40" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Projects</text>
+      <rect x="120" y="730" width="120" height="30" fill="#1F1F1F"/>
+      <rect x="120" y="730" width="120" height="2" fill="#0078D4"/>
+      <text x="142" y="750" font-size="12" fill="#FFFFFF" class="font-ui" font-weight="600">Terminals</text>
+      <rect x="240" y="730" width="120" height="30" fill="#181818"/>
+      <text x="268" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Remote</text>
+    </svg>
+  </div>
+  <div class="docs">
+    <h3>Documentation</h3>
+    <ul>
+      <li>Surfaces: app frame &amp; chrome use <span class="tag">bg.chrome #181818</span>; the conversation/results area uses <span class="tag">bg.canvas #1F1F1F</span>; cards/responses use <span class="tag">bg.elevated #222222</span> with <span class="tag">border.subtle</span>.</li>
+      <li>Header: <span class="tag">&#9776; hamburger</span> (Codicon menu) + search input on <span class="tag">bg.input #313131</span> with <span class="tag">border.default</span>; close (x) and stop (square) icons in <span class="tag">fg.muted</span>.</li>
+      <li><strong>File search / grep toggle:</strong> active segment uses <span class="tag">accent.primary #0078D4</span> fill with <span class="tag">fg.strong</span> text; inactive segment uses <span class="tag">bg.input</span>.</li>
+      <li>Result list styled as sidebar tree rows (13px workbench UI / monospace for paths), <span class="tag">fg.default</span> text, active-line indicator bar in <span class="tag">accent.primary</span>, line-range badge in <span class="tag">fg.inactive</span>.</li>
+      <li><strong>Cursor responses panel:</strong> each block follows AI panel language — file-edit badges use <span class="tag">ai.editedFileFg #E2C08D</span>; slash/tool-command blocks use <span class="tag">ai.commandBg #26477866</span> + <span class="tag">ai.commandFg #85B6FF</span> in monospace; streaming caret in <span class="tag">accent.primary</span>.</li>
+      <li><strong>Composer (matches reference):</strong> rounded 8px card on <span class="tag">bg.elevated #222222</span>, <span class="tag">border.default</span>, placeholder "Plan, Build, / for skills, @ for context" in <span class="tag">fg.placeholder #989898</span>. Footer row inside composer holds an <strong>∞</strong> (context/length) pill, an <strong>Auto ⌄</strong> model selector, and attach/mic icons (Codicons, <span class="tag">fg.muted</span>, 16px).</li>
+      <li>Bottom nav tabs: active tab (<strong>Terminals</strong> shown) gets <span class="tag">bg.canvas</span> background + 2px top border in <span class="tag">accent.primary</span> + <span class="tag">fg.strong</span> label; inactive tabs sit on <span class="tag">bg.chrome</span> with <span class="tag">fg.default</span>.</li>
+      <li><strong>Behavior — Projects tab, when searching:</strong> agent window collapses to just the message/composer; the search/results area takes ~60vh.</li>
+      <li><strong>Behavior — referencing files:</strong> when in file-select (incl. full-file select on top), the agent panel takes ~60% and only the search bar stays visible at top. <code>@</code> file-reference still works inside the composer.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SCREEN 2 -->
+<div class="screen">
+  <div class="screen-header">2. Terminals Tab</div>
+  <div class="wireframe">
+    <svg viewBox="0 0 360 760" width="320" height="676" xmlns="http://www.w3.org/2000/svg">
+      <rect width="360" height="760" fill="#181818"/>
+      <text x="20" y="24" font-size="11" fill="#9D9D9D" class="font-ui">9:41</text>
+      <text x="320" y="24" font-size="11" fill="#9D9D9D" text-anchor="end" class="font-ui">100%</text>
+
+      <rect x="0" y="36" width="360" height="44" fill="#181818"/>
+      <line x1="0" y1="80" x2="360" y2="80" stroke="#2B2B2B"/>
+      <text x="20" y="65" font-size="18" fill="#CCCCCC" class="cdc">&#xeb94;</text>
+      <text x="180" y="64" font-size="14" fill="#FFFFFF" text-anchor="middle" class="font-ui" font-weight="600">Terminals</text>
+      <rect x="20" y="92" width="320" height="300" rx="4" fill="#1F1F1F" stroke="#2B2B2B"/>
+      <g class="font-mono" font-size="13" fill="#CCCCCC">
+        <text x="32" y="118">C:/ ---&gt; </text>
+        <text x="32" y="142" fill="#9D9D9D">C:/ ---&gt; echo "I'm the best"</text>
+        <text x="32" y="166" fill="#2EA043">I'm the best</text>
+      </g>
+      <rect x="32" y="178" width="7" height="14" fill="#0078D4"/>
+
+      <!-- selected terminal bar -->
+      <rect x="20" y="404" width="320" height="36" rx="4" fill="#222222" stroke="#3C3C3C"/>
+      <circle cx="36" cy="422" r="4" fill="#2EA043"/>
+      <text x="48" y="427" font-size="13" fill="#FFFFFF" class="font-ui" font-weight="500">bash — main</text>
+      <text x="276" y="430" font-size="14" fill="#9D9D9D" class="cdc">&#xeab5;</text>
+      <text x="306" y="430" font-size="14" fill="#9D9D9D" class="cdc">&#xea81;</text>
+
+      <!-- terminal list -->
+      <g class="font-ui" font-size="12">
+        <rect x="20" y="450" width="320" height="34" fill="#1F1F1F"/>
+        <circle cx="36" cy="467" r="4" fill="#6E7681"/>
+        <text x="48" y="471" fill="#CCCCCC">node — server</text>
+        <rect x="20" y="484" width="320" height="34" fill="#181818"/>
+        <circle cx="36" cy="501" r="4" fill="#6E7681"/>
+        <text x="48" y="505" fill="#CCCCCC">ssh — vps-prod</text>
+        <rect x="20" y="518" width="320" height="34" fill="#1F1F1F"/>
+        <circle cx="36" cy="535" r="4" fill="#6E7681"/>
+        <text x="48" y="539" fill="#CCCCCC">zsh — qdrant-worker</text>
+      </g>
+      <rect x="334" y="450" width="6" height="102" fill="#313131" rx="3"/>
+      <text x="290" y="448" font-size="10" fill="#6E7681" text-anchor="end">scrollable</text>
+
+      <line x1="0" y1="630" x2="360" y2="630" stroke="#2B2B2B"/>
+      <rect x="16" y="642" width="328" height="78" rx="8" fill="#1A1A1A" stroke="#2B2B2B" stroke-dasharray="4 3"/>
+      <text x="30" y="666" font-size="12" fill="#6E7681" class="font-ui">Composer hidden on Terminals tab</text>
+
+      <line x1="0" y1="730" x2="360" y2="730" stroke="#2B2B2B"/>
+      <rect x="0" y="730" width="120" height="30" fill="#181818"/><text x="40" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Projects</text>
+      <rect x="120" y="730" width="120" height="30" fill="#1F1F1F"/><rect x="120" y="730" width="120" height="2" fill="#0078D4"/>
+      <text x="142" y="750" font-size="12" fill="#FFFFFF" class="font-ui" font-weight="600">Terminals</text>
+      <rect x="240" y="730" width="120" height="30" fill="#181818"/><text x="268" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Remote</text>
+    </svg>
+  </div>
+  <div class="docs">
+    <h3>Documentation</h3>
+    <ul>
+      <li>Terminal output region: <span class="tag">bg.canvas #1F1F1F</span>, editor monospace (Consolas / Ubuntu Mono) 13px, <span class="tag">fg.default</span> for normal text, success/output lines in <span class="tag">status.success #2EA043</span>, blinking cursor block in <span class="tag">accent.primary</span>.</li>
+      <li><strong>Selected Terminal bar:</strong> <span class="tag">bg.elevated #222222</span> with <span class="tag">border.default</span>; live status dot in <span class="tag">status.success</span>; label in <span class="tag">fg.strong</span>; <strong>+</strong> (new) and trash (delete) Codicons in <span class="tag">fg.muted</span>, 16px.</li>
+      <li><strong>Terminal list:</strong> alternating row backgrounds (<span class="tag">bg.canvas</span> / <span class="tag">bg.chrome</span>) matching sidebar tree styling, status dot per session, scrollbar thumb in <span class="tag">bg.input</span>.</li>
+      <li>Composer is hidden/dimmed on this tab (dashed placeholder in <span class="tag">border.subtle</span> / <span class="tag">fg.inactive</span>) — not part of the terminal workflow.</li>
+      <li><strong>SSH behavior:</strong> SSH-backed terminals supported with VS-Code-like add/delete controls. After SSH connects, terminal auto-<code>cd</code>s into the current project directory.</li>
+      <li>Bottom nav unchanged: active tab indicated with 2px <span class="tag">accent.primary</span> top border + <span class="tag">bg.canvas</span> fill.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SCREEN 3 -->
+<div class="screen">
+  <div class="screen-header">3. Remote Tab — Screen + Controls (Trackpad tab vs Keyboard tab)</div>
+  <div class="wireframe">
+    <!-- VARIANT A: Trackpad -->
+    <svg viewBox="0 0 360 760" width="280" height="591" xmlns="http://www.w3.org/2000/svg">
+      <rect width="360" height="760" fill="#181818"/>
+      <text x="20" y="24" font-size="11" fill="#9D9D9D" class="font-ui">9:41</text>
+      <text x="320" y="24" font-size="11" fill="#9D9D9D" text-anchor="end" class="font-ui">100%</text>
+      <rect x="0" y="36" width="360" height="44" fill="#181818"/>
+      <line x1="0" y1="80" x2="360" y2="80" stroke="#2B2B2B"/>
+      <text x="20" y="65" font-size="18" fill="#CCCCCC" class="cdc">&#xeb94;</text>
+      <text x="180" y="64" font-size="14" fill="#FFFFFF" text-anchor="middle" class="font-ui" font-weight="600">Remote</text>
+
+      <!-- screen with pointer -->
+      <rect x="20" y="92" width="320" height="270" rx="4" fill="#0F0F0F" stroke="#2B2B2B"/>
+      <text x="34" y="116" font-size="11" fill="#6E7681" class="font-ui">~50% · remote desktop</text>
+      <!-- fake desktop content -->
+      <rect x="36" y="130" width="120" height="80" rx="3" fill="#1F1F1F" stroke="#2B2B2B"/>
+      <rect x="166" y="130" width="160" height="40" rx="3" fill="#1F1F1F" stroke="#2B2B2B"/>
+      <rect x="166" y="178" width="160" height="32" rx="3" fill="#26477866" stroke="#2B2B2B"/>
+      <!-- pointer -->
+      <path d="M210 230 l16 24 l-6 2 l5 9 l-5 3 l-5-9 l-6 4 z" fill="#FFFFFF" stroke="#0078D4"/>
+
+      <line x1="0" y1="375" x2="360" y2="375" stroke="#2B2B2B"/>
+      <text x="22" y="397" font-size="12" fill="#9D9D9D" class="font-ui" font-weight="600">CONTROLS · ~50%</text>
+
+      <!-- trackpad panel -->
+      <rect x="20" y="410" width="320" height="200" rx="4" fill="#1F1F1F" stroke="#2B2B2B"/>
+      <text x="135" y="450" font-size="12" fill="#6E7681" class="font-ui" text-anchor="middle">Trackpad surface</text>
+      <rect x="60" y="555" width="100" height="32" rx="4" fill="#313131" stroke="#3C3C3C"/>
+      <text x="92" y="576" font-size="12" fill="#CCCCCC" class="font-ui">Left</text>
+      <rect x="200" y="555" width="100" height="32" rx="4" fill="#313131" stroke="#3C3C3C"/>
+      <text x="228" y="576" font-size="12" fill="#CCCCCC" class="font-ui">Right</text>
+
+      <!-- sub tabs -->
+      <line x1="0" y1="618" x2="360" y2="618" stroke="#2B2B2B"/>
+      <rect x="20" y="618" width="160" height="34" fill="#1F1F1F"/>
+      <rect x="20" y="618" width="160" height="2" fill="#0078D4"/>
+      <text x="55" y="640" font-size="12" fill="#FFFFFF" class="font-ui" font-weight="600">Trackpad</text>
+      <rect x="180" y="618" width="160" height="34" fill="#181818"/>
+      <text x="218" y="640" font-size="12" fill="#9D9D9D" class="font-ui">Keyboard</text>
+
+      <line x1="0" y1="730" x2="360" y2="730" stroke="#2B2B2B"/>
+      <rect x="0" y="730" width="120" height="30" fill="#181818"/><text x="40" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Projects</text>
+      <rect x="120" y="730" width="120" height="30" fill="#181818"/><text x="142" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Terminals</text>
+      <rect x="240" y="730" width="120" height="30" fill="#1F1F1F"/><rect x="240" y="730" width="120" height="2" fill="#0078D4"/>
+      <text x="268" y="750" font-size="12" fill="#FFFFFF" class="font-ui" font-weight="600">Remote</text>
+    </svg>
+
+    <!-- VARIANT B: Keyboard -->
+    <svg viewBox="0 0 360 760" width="280" height="591" xmlns="http://www.w3.org/2000/svg">
+      <rect width="360" height="760" fill="#181818"/>
+      <text x="20" y="24" font-size="11" fill="#9D9D9D" class="font-ui">9:41</text>
+      <text x="320" y="24" font-size="11" fill="#9D9D9D" text-anchor="end" class="font-ui">100%</text>
+      <rect x="0" y="36" width="360" height="44" fill="#181818"/>
+      <line x1="0" y1="80" x2="360" y2="80" stroke="#2B2B2B"/>
+      <text x="20" y="65" font-size="18" fill="#CCCCCC" class="cdc">&#xeb94;</text>
+      <text x="180" y="64" font-size="14" fill="#FFFFFF" text-anchor="middle" class="font-ui" font-weight="600">Remote</text>
+
+      <rect x="20" y="92" width="320" height="270" rx="4" fill="#0F0F0F" stroke="#2B2B2B"/>
+      <text x="34" y="116" font-size="11" fill="#6E7681" class="font-ui">~50% · remote desktop</text>
+      <rect x="36" y="130" width="120" height="80" rx="3" fill="#1F1F1F" stroke="#2B2B2B"/>
+      <rect x="166" y="130" width="160" height="40" rx="3" fill="#1F1F1F" stroke="#2B2B2B"/>
+      <rect x="166" y="178" width="160" height="32" rx="3" fill="#26477866" stroke="#2B2B2B"/>
+      <path d="M210 230 l16 24 l-6 2 l5 9 l-5 3 l-5-9 l-6 4 z" fill="#FFFFFF" stroke="#0078D4"/>
+
+      <line x1="0" y1="375" x2="360" y2="375" stroke="#2B2B2B"/>
+      <text x="22" y="397" font-size="12" fill="#9D9D9D" class="font-ui" font-weight="600">CONTROLS · ~50%</text>
+
+      <!-- keyboard panel -->
+      <rect x="20" y="410" width="320" height="200" rx="4" fill="#1F1F1F" stroke="#2B2B2B"/>
+      <g class="font-ui" font-size="13" fill="#CCCCCC">
+        <text x="36" y="438">Fn: special keyboard</text>
+        <text x="52" y="458">keys, Fn to shift etc.</text>
+        <text x="36" y="482">$#: special chars</text>
+        <text x="36" y="504">123: number</text>
+      </g>
+      <line x1="20" y1="525" x2="340" y2="525" stroke="#2B2B2B"/>
+
+      <!-- key row -->
+      <rect x="32" y="538" width="58" height="40" rx="4" fill="#313131" stroke="#3C3C3C"/><text x="50" y="563" font-size="13" fill="#CCCCCC" class="font-ui">Fn</text>
+      <rect x="98" y="538" width="58" height="40" rx="4" fill="#313131" stroke="#3C3C3C"/><text x="114" y="563" font-size="13" fill="#CCCCCC" class="font-mono">$#</text>
+      <rect x="164" y="538" width="58" height="40" rx="4" fill="#313131" stroke="#3C3C3C"/><text x="176" y="563" font-size="13" fill="#CCCCCC" class="font-ui">123</text>
+      <text x="240" y="569" font-size="16" fill="#F85149" class="cdc">&#xea76;</text>
+      <text x="270" y="566" font-size="18" fill="#9D9D9D" class="font-ui">+</text>
+      <text x="295" y="569" font-size="16" fill="#2EA043" class="cdc">&#xeab2;</text>
+
+      <!-- sub tabs -->
+      <line x1="0" y1="618" x2="360" y2="618" stroke="#2B2B2B"/>
+      <rect x="20" y="618" width="160" height="34" fill="#181818"/>
+      <text x="55" y="640" font-size="12" fill="#9D9D9D" class="font-ui">Trackpad</text>
+      <rect x="180" y="618" width="160" height="34" fill="#1F1F1F"/>
+      <rect x="180" y="618" width="160" height="2" fill="#0078D4"/>
+      <text x="218" y="640" font-size="12" fill="#FFFFFF" class="font-ui" font-weight="600">Keyboard</text>
+
+      <line x1="0" y1="730" x2="360" y2="730" stroke="#2B2B2B"/>
+      <rect x="0" y="730" width="120" height="30" fill="#181818"/><text x="40" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Projects</text>
+      <rect x="120" y="730" width="120" height="30" fill="#181818"/><text x="142" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Terminals</text>
+      <rect x="240" y="730" width="120" height="30" fill="#1F1F1F"/><rect x="240" y="730" width="120" height="2" fill="#0078D4"/>
+      <text x="268" y="750" font-size="12" fill="#FFFFFF" class="font-ui" font-weight="600">Remote</text>
+    </svg>
+  </div>
+  <div class="docs">
+    <h3>Documentation</h3>
+    <ul>
+      <li><strong>Screen with pointer (top ~50%):</strong> rendered on near-black <span class="tag">#0F0F0F</span> (deeper than canvas, to distinguish remote framebuffer from local chrome); remote window chrome mocked with <span class="tag">bg.canvas</span> rectangles and an <span class="tag">ai.commandBg</span> tinted panel; cursor arrow outlined in <span class="tag">accent.primary</span>.</li>
+      <li><strong>Controls (bottom ~50%):</strong> panel on <span class="tag">bg.canvas #1F1F1F</span> with <span class="tag">border.subtle</span>.</li>
+      <li><strong>Trackpad tab (left):</strong> trackpad surface fills the panel; <strong>Left</strong> / <strong>Right</strong> click buttons styled as secondary buttons (<span class="tag">bg.input</span> / <span class="tag">border.default</span>, hover <span class="tag">bg.input-hover</span>).</li>
+      <li><strong>Keyboard tab (right):</strong> reference text block in <span class="tag">fg.default</span>, then three key buttons (<span class="tag">Fn</span>, <span class="tag">$#</span> monospace, <span class="tag">123</span>) styled as secondary buttons on <span class="tag">bg.input</span>.</li>
+      <li><strong>Action icons next to keys:</strong> <span class="tag">x</span> (cancel staged input) in <span class="tag">status.error #F85149</span>; <span class="tag">+</span> (compose/add to combo) in <span class="tag">fg.muted</span>; <span class="tag">✓</span> (send keystroke to remote) in <span class="tag">status.success #2EA043</span> — mirrors the diff-preview color convention (added/success = green, destructive = red).</li>
+      <li><strong>Sub-tabs (Trackpad | Keyboard):</strong> active tab gets 2px <span class="tag">accent.primary</span> top border + <span class="tag">fg.strong</span> label, matching the main tab-strip pattern.</li>
+      <li><strong>Input trigger flow:</strong> interactions are staged; <strong>x</strong> discards staged input, <strong>+</strong> builds up a combo, <strong>✓</strong> dispatches the composed keystroke/input event to the remote session.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SCREEN 4 -->
+<div class="screen">
+  <div class="screen-header">4. Hamburger Menu — Workspace Panel (FTP Navigator)</div>
+  <div class="wireframe">
+    <svg viewBox="0 0 360 760" width="320" height="676" xmlns="http://www.w3.org/2000/svg">
+      <rect width="360" height="760" fill="#181818"/>
+      <text x="20" y="24" font-size="11" fill="#9D9D9D" class="font-ui">9:41</text>
+      <text x="320" y="24" font-size="11" fill="#9D9D9D" text-anchor="end" class="font-ui">100%</text>
+
+      <!-- panel tabs -->
+      <rect x="0" y="36" width="360" height="44" fill="#181818"/>
+      <rect x="0" y="36" width="180" height="44" fill="#1F1F1F"/>
+      <rect x="0" y="36" width="180" height="2" fill="#0078D4"/>
+      <text x="30" y="64" font-size="14" fill="#FFFFFF" class="font-ui" font-weight="600">Workspace</text>
+      <rect x="180" y="36" width="180" height="44" fill="#181818"/>
+      <text x="255" y="64" font-size="14" fill="#9D9D9D" class="font-ui">Git</text>
+      <!-- close icon -->
+      <text x="328" y="65" font-size="16" fill="#9D9D9D" class="cdc">&#xea76;</text>
+      <!-- git graph icon -->
+      <text x="332" y="78" font-size="14" fill="#85B6FF" class="cdc">&#xeb47;</text>
+      <line x1="0" y1="80" x2="360" y2="80" stroke="#2B2B2B"/>
+
+      <!-- current workspace selector -->
+      <rect x="20" y="96" width="320" height="36" rx="4" fill="#313131" stroke="#3C3C3C"/>
+      <text x="34" y="119" font-size="13" fill="#CCCCCC" class="font-ui">vadsoft-it / olous-platform</text>
+      <text x="316" y="119" font-size="11" fill="#9D9D9D" class="font-ui">⌄</text>
+
+      <!-- recent items -->
+      <g class="font-ui" font-size="13" fill="#CCCCCC">
+        <rect x="20" y="142" width="320" height="32" fill="#1F1F1F"/>
+        <circle cx="36" cy="158" r="2.5" fill="#0078D4"/>
+        <text x="48" y="163">skyjet-lms (recent)</text>
+        <rect x="20" y="174" width="320" height="32" fill="#181818"/>
+        <circle cx="36" cy="190" r="2.5" fill="#6E7681"/>
+        <text x="48" y="195">pagarbook-bridge</text>
+      </g>
+      <line x1="0" y1="206" x2="360" y2="206" stroke="#2B2B2B"/>
+
+      <!-- FTP navigator -->
+      <text x="20" y="232" font-size="12" fill="#9D9D9D" class="font-ui" font-weight="600">FTP NAVIGATOR</text>
+      <rect x="20" y="244" width="320" height="290" rx="4" fill="#1F1F1F" stroke="#2B2B2B"/>
+      <g class="font-mono" font-size="12" fill="#CCCCCC">
+        <text x="34" y="268">/var/www/</text>
+        <text x="46" y="290" fill="#E2C08D">olous-frontend/</text>
+        <text x="46" y="312">olous-backend/</text>
+        <text x="58" y="334" fill="#9D9D9D">manage.py</text>
+        <text x="58" y="356" fill="#9D9D9D">requirements.txt</text>
+        <text x="46" y="378">media/</text>
+      </g>
+      <rect x="334" y="244" width="6" height="120" fill="#313131" rx="3"/>
+
+      <!-- FTP path -->
+      <rect x="20" y="548" width="320" height="34" rx="4" fill="#313131" stroke="#3C3C3C"/>
+      <text x="32" y="570" font-size="12" fill="#CCCCCC" class="font-mono">/var/www/olous-backend</text>
+
+      <!-- select / new folder / new file -->
+      <rect x="20" y="592" width="150" height="32" rx="4" fill="#313131" stroke="#3C3C3C"/>
+      <text x="68" y="613" font-size="12" fill="#CCCCCC" class="font-ui" text-anchor="middle">Select</text>
+      <rect x="190" y="592" width="150" height="32" rx="4" fill="#313131" stroke="#3C3C3C"/>
+      <text x="265" y="613" font-size="12" fill="#CCCCCC" class="font-ui" text-anchor="middle">+ New folder</text>
+      <rect x="105" y="634" width="150" height="32" rx="4" fill="#0078D4" stroke="#0078D4"/>
+      <text x="180" y="655" font-size="12" fill="#FFFFFF" class="font-ui" font-weight="600" text-anchor="middle">+ New file</text>
+
+      <line x1="0" y1="730" x2="360" y2="730" stroke="#2B2B2B"/>
+      <rect x="0" y="730" width="120" height="30" fill="#181818"/><text x="40" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Projects</text>
+      <rect x="120" y="730" width="120" height="30" fill="#181818"/><text x="142" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Terminals</text>
+      <rect x="240" y="730" width="120" height="30" fill="#181818"/><text x="268" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Remote</text>
+    </svg>
+  </div>
+  <div class="docs">
+    <h3>Documentation</h3>
+    <ul>
+      <li>Full-screen panel opened via hamburger; top tab strip follows tab-strip rules: active <strong>Workspace</strong> tab gets <span class="tag">bg.canvas</span> fill + 2px <span class="tag">accent.primary</span> top border + <span class="tag">fg.strong</span> label; inactive <strong>Git</strong> tab on <span class="tag">bg.chrome</span> with <span class="tag">fg.muted</span>.</li>
+      <li><span class="tag">x</span> close icon top-right in <span class="tag">fg.muted</span>; "git graph" shortcut icon rendered in <span class="tag">ai.commandFg #85B6FF</span> to hint at AI/graph affordance.</li>
+      <li><strong>Current workspace selector:</strong> dropdown styled as input — <span class="tag">bg.input #313131</span>, <span class="tag">border.default</span>, chevron in <span class="tag">fg.muted</span>.</li>
+      <li><strong>Recent items list:</strong> sidebar-row styling — alternating <span class="tag">bg.canvas</span>/<span class="tag">bg.chrome</span>, active/selected row marked with a small <span class="tag">accent.primary</span> dot.</li>
+      <li><strong>FTP Navigator:</strong> tree view on <span class="tag">bg.canvas</span>, monospace paths in <span class="tag">fg.default</span>, folders tinted with <span class="tag">ai.editedFileFg #E2C08D</span> for emphasis, files in <span class="tag">fg.muted</span>, scrollbar thumb in <span class="tag">bg.input</span>.</li>
+      <li><strong>FTP Path field:</strong> <span class="tag">bg.input</span> input showing the active remote path in monospace.</li>
+      <li><strong>Action buttons:</strong> <span class="tag">Select</span> and <span class="tag">+ New folder</span> are secondary buttons (<span class="tag">bg.input</span>/<span class="tag">border.default</span>, hover <span class="tag">bg.input-hover</span>); <span class="tag">+ New file</span> is the primary CTA in <span class="tag">accent.primary</span> with <span class="tag">fg.strong</span> text.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SCREEN 5 -->
+<div class="screen">
+  <div class="screen-header">5. Hamburger Menu — Git Tab</div>
+  <div class="wireframe">
+    <svg viewBox="0 0 360 760" width="320" height="676" xmlns="http://www.w3.org/2000/svg">
+      <rect width="360" height="760" fill="#181818"/>
+      <text x="20" y="24" font-size="11" fill="#9D9D9D" class="font-ui">9:41</text>
+      <text x="320" y="24" font-size="11" fill="#9D9D9D" text-anchor="end" class="font-ui">100%</text>
+
+      <rect x="0" y="36" width="360" height="44" fill="#181818"/>
+      <rect x="0" y="36" width="180" height="44" fill="#181818"/>
+      <text x="30" y="64" font-size="14" fill="#9D9D9D" class="font-ui">Workspace</text>
+      <rect x="180" y="36" width="180" height="44" fill="#1F1F1F"/>
+      <rect x="180" y="36" width="180" height="2" fill="#0078D4"/>
+      <text x="255" y="64" font-size="14" fill="#FFFFFF" class="font-ui" font-weight="600">Git</text>
+      <text x="328" y="65" font-size="16" fill="#9D9D9D" class="cdc">&#xea76;</text>
+      <line x1="0" y1="80" x2="360" y2="80" stroke="#2B2B2B"/>
+
+      <!-- commit msg + commit btn -->
+      <rect x="20" y="96" width="220" height="36" rx="4" fill="#313131" stroke="#3C3C3C"/>
+      <text x="32" y="119" font-size="12" fill="#989898" class="font-ui">Commit message…</text>
+      <rect x="250" y="96" width="90" height="36" rx="4" fill="#0078D4" stroke="#0078D4"/>
+      <text x="262" y="120" font-size="14" fill="#FFFFFF" class="cdc">&#xeab2;</text>
+      <text x="284" y="119" font-size="12" fill="#FFFFFF" class="font-ui" font-weight="600">Commit</text>
+
+      <!-- quick actions row -->
+      <g class="font-ui" font-size="11" fill="#CCCCCC">
+        <rect x="20" y="142" width="58" height="26" rx="4" fill="#313131" stroke="#3C3C3C"/><text x="32" y="159">Add</text>
+        <rect x="84" y="142" width="58" height="26" rx="4" fill="#313131" stroke="#3C3C3C"/><text x="94" y="159">Stash</text>
+        <rect x="148" y="142" width="68" height="26" rx="4" fill="#313131" stroke="#3C3C3C"/><text x="158" y="159" fill="#F85149">Discard</text>
+        <rect x="222" y="142" width="68" height="26" rx="4" fill="#313131" stroke="#3C3C3C"/><text x="234" y="159">Commit</text>
+        <rect x="296" y="142" width="44" height="26" rx="4" fill="#313131" stroke="#3C3C3C"/><text x="306" y="159">Sync</text>
+      </g>
+
+      <!-- changed files -->
+      <text x="20" y="192" font-size="12" fill="#9D9D9D" class="font-ui" font-weight="600">CHANGED FILES</text>
+      <rect x="20" y="202" width="320" height="118" rx="4" fill="#1F1F1F" stroke="#2B2B2B"/>
+      <g class="font-mono" font-size="12">
+        <rect x="28" y="212" width="232" height="26" fill="#26477866"/>
+        <text x="36" y="229" fill="#E2C08D">M  routes/agent.py</text>
+        <text x="270" y="229" fill="#9D9D9D">+ ⏎</text>
+        <text x="36" y="261" fill="#2EA043">A  utils/mock.py</text>
+        <text x="270" y="261" fill="#9D9D9D">+ ⏎</text>
+        <text x="36" y="293" fill="#F85149">D  legacy/old_api.py</text>
+        <text x="270" y="293" fill="#9D9D9D">+ ⏎</text>
+      </g>
+      <rect x="334" y="202" width="6" height="118" fill="#313131" rx="3"/>
+
+      <!-- command input -->
+      <rect x="20" y="332" width="320" height="38" rx="6" fill="#313131" stroke="#3C3C3C"/>
+      <text x="34" y="356" font-size="12" fill="#989898" class="font-mono">git command…  ⏎</text>
+
+      <!-- branch + select -->
+      <rect x="20" y="386" width="180" height="34" rx="4" fill="#313131" stroke="#3C3C3C"/>
+      <text x="34" y="408" font-size="12" fill="#CCCCCC" class="font-mono">main ⌄</text>
+      <rect x="215" y="386" width="125" height="34" rx="4" fill="#0078D4" stroke="#0078D4"/>
+      <text x="277" y="408" font-size="12" fill="#FFFFFF" class="font-ui" font-weight="600" text-anchor="middle">Select</text>
+
+      <!-- commit history -->
+      <text x="20" y="446" font-size="12" fill="#9D9D9D" class="font-ui" font-weight="600">COMMIT HISTORY</text>
+      <rect x="20" y="456" width="320" height="200" rx="4" fill="#1F1F1F" stroke="#2B2B2B"/>
+      <line x1="40" y1="478" x2="40" y2="630" stroke="#3C3C3C"/>
+      <g class="font-ui" font-size="12" fill="#CCCCCC">
+        <circle cx="40" cy="478" r="4" fill="#0078D4"/>
+        <text x="52" y="482">feat: add mock.py self-test suite</text>
+        <text x="52" y="498" fill="#6E7681" font-size="10">HEAD → main · 2h ago</text>
+
+        <circle cx="40" cy="528" r="4" fill="#6E7681"/>
+        <text x="52" y="532">fix: parser stream tokens</text>
+
+        <circle cx="40" cy="568" r="4" fill="#6E7681"/>
+        <text x="52" y="572">docs: update IndexExtractor.md</text>
+
+        <circle cx="40" cy="608" r="4" fill="#6E7681"/>
+        <text x="52" y="612">chore: scope doc for LEPL platform</text>
+      </g>
+
+      <line x1="0" y1="730" x2="360" y2="730" stroke="#2B2B2B"/>
+      <rect x="0" y="730" width="120" height="30" fill="#181818"/><text x="40" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Projects</text>
+      <rect x="120" y="730" width="120" height="30" fill="#181818"/><text x="142" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Terminals</text>
+      <rect x="240" y="730" width="120" height="30" fill="#181818"/><text x="268" y="750" font-size="12" fill="#CCCCCC" class="font-ui">Remote</text>
+    </svg>
+  </div>
+  <div class="docs">
+    <h3>Documentation</h3>
+    <ul>
+      <li>Tab strip: <strong>Git</strong> active (<span class="tag">bg.canvas</span> + 2px <span class="tag">accent.primary</span> top border + <span class="tag">fg.strong</span>); <strong>Workspace</strong> inactive (<span class="tag">bg.chrome</span> + <span class="tag">fg.muted</span>).</li>
+      <li><strong>Commit message input:</strong> <span class="tag">bg.input</span>/<span class="tag">border.default</span>, placeholder in <span class="tag">fg.placeholder</span>; <strong>Commit</strong> is the primary CTA (<span class="tag">accent.primary</span> + <span class="tag">fg.strong</span> + check icon).</li>
+      <li><strong>Quick actions row</strong> (Add / Stash / Discard / Commit / Sync): secondary buttons on <span class="tag">bg.input</span>; <strong>Discard</strong> labeled in <span class="tag">status.error #F85149</span> to signal destructive action.</li>
+      <li><strong>Changed files list:</strong> each row uses git-status letter + monospace path; modified (<strong>M</strong>) rows tinted with <span class="tag">ai.commandBg</span> and path in <span class="tag">ai.editedFileFg #E2C08D</span>; added (<strong>A</strong>) in <span class="tag">status.success</span>; deleted (<strong>D</strong>) in <span class="tag">status.error</span> — following the diff-preview convention (added=success, removed=error, modified=info/edited).</li>
+      <li>Each file row has a <span class="tag">+ ⏎</span> stage action in <span class="tag">fg.muted</span>; list sits on <span class="tag">bg.canvas</span> with a <span class="tag">bg.input</span> scrollbar thumb.</li>
+      <li><strong>Command input:</strong> rounded 6px field on <span class="tag">bg.input</span>, monospace placeholder, ⏎ to execute raw git commands.</li>
+      <li><strong>Branch selector:</strong> current branch shown in monospace on <span class="tag">bg.input</span> with chevron; <strong>Select</strong> is a primary CTA — pressing it triggers a branch switch.</li>
+      <li><strong>Commit history:</strong> vertical graph line in <span class="tag">border.default</span>; HEAD commit dot in <span class="tag">accent.primary</span>, other commits in <span class="tag">fg.inactive #6E7681</span>; subject text in <span class="tag">fg.default</span>, meta (hash/branch/time) in <span class="tag">fg.inactive</span> at 10px.</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

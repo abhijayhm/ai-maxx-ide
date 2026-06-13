@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>App Wireframes & Documentation</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f4f6; margin:0; padding:24px; color:#222; }
+  .container { max-width: 960px; margin: 0 auto; }
+  h1 { text-align:center; }
+  .screen { background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08); margin-bottom:48px; overflow:hidden; }
+  .screen-header { background:#2c3e50; color:#fff; padding:14px 20px; font-size:18px; font-weight:600; }
+  .wireframe { padding:20px; display:flex; justify-content:center; background:#fafafa; }
+  .wireframe svg { border:1px solid #ddd; background:#fff; max-width:100%; }
+  .docs { padding:20px; border-top:1px solid #eee; }
+  .docs h3 { margin-top:0; color:#2c3e50; }
+  .docs ul { margin:8px 0 0 18px; padding:0; }
+  .docs li { margin-bottom:6px; line-height:1.5; }
+  .tag { display:inline-block; background:#eef2f7; color:#34495e; border-radius:4px; padding:2px 6px; font-size:12px; font-family:monospace; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Mobile IDE / Agent App — Wireframe Documentation</h1>
+<p style="text-align:center;color:#666;">Compiled from handwritten notes (pages 1–4) — full-screen layouts with consistent app chrome</p>
+
+<!-- SCREEN 1 -->
+<div class="screen">
+  <div class="screen-header">1. Main / Search &amp; Agent Chat Screen</div>
+  <div class="wireframe">
+    <svg viewBox="0 0 360 760" width="320" height="676" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="356" height="756" rx="16" fill="#fff" stroke="#333" stroke-width="2"/>
+
+      <!-- status bar -->
+      <text x="20" y="24" font-size="11" fill="#999">9:41</text>
+      <text x="320" y="24" font-size="11" fill="#999" text-anchor="end">100%</text>
+
+      <!-- app header: hamburger + search bar + close/stop -->
+      <line x1="0" y1="36" x2="360" y2="36" stroke="#ddd"/>
+      <text x="22" y="58" font-size="18">&#9776;</text>
+      <rect x="50" y="44" width="170" height="28" fill="none" stroke="#333"/>
+      <text x="60" y="62" font-size="12" fill="#888">Search Bar</text>
+      <text x="232" y="62" font-size="10" fill="#888">Close</text>
+      <circle cx="225" cy="58" r="8" fill="none" stroke="#999"/>
+      <text x="296" y="62" font-size="10" fill="#888">Stop</text>
+      <circle cx="320" cy="58" r="8" fill="none" stroke="#999"/>
+      <line x1="0" y1="80" x2="360" y2="80" stroke="#333"/>
+
+      <!-- file search / grep toggle -->
+      <rect x="20" y="92" width="150" height="26" fill="none" stroke="#333"/>
+      <text x="35" y="109" font-size="12">File search</text>
+      <rect x="175" y="92" width="160" height="26" fill="none" stroke="#333"/>
+      <text x="190" y="109" font-size="12">grep</text>
+      <text x="225" y="138" font-size="9" fill="#888">Ctrl+A select all</text>
+      <text x="290" y="92" font-size="9" fill="#888">github-like</text>
+      <text x="290" y="104" font-size="9" fill="#888">file show (cpp)</text>
+      <text x="290" y="116" font-size="9" fill="#888">long press</text>
+      <text x="290" y="128" font-size="9" fill="#888">selectable;</text>
+      <text x="290" y="140" font-size="9" fill="#888">range</text>
+
+      <!-- result list -->
+      <line x1="20" y1="148" x2="170" y2="148" stroke="#999"/>
+      <text x="22" y="166" font-size="14">+</text><line x1="40" y1="164" x2="160" y2="164" stroke="#bbb"/>
+      <text x="22" y="186" font-size="14">+</text><line x1="40" y1="184" x2="160" y2="184" stroke="#bbb"/>
+      <text x="22" y="206" font-size="14">+</text><line x1="40" y1="204" x2="170" y2="204" stroke="#bbb"/>
+      <text x="22" y="226" font-size="14">+</text><line x1="40" y1="224" x2="150" y2="224" stroke="#bbb"/>
+      <text x="22" y="246" font-size="14">+</text><line x1="40" y1="244" x2="160" y2="244" stroke="#bbb"/>
+      <line x1="0" y1="262" x2="360" y2="262" stroke="#333"/>
+
+      <!-- cursor responses (flexible area) -->
+      <text x="20" y="285" font-size="13">Cursor responses</text>
+      <rect x="335" y="262" width="14" height="380" fill="none" stroke="#999"/>
+      <text x="345" y="275" font-size="9" fill="#888" transform="rotate(90 345 275)">scroll</text>
+      <rect x="20" y="295" width="320" height="320" fill="#fcfcfc" stroke="#eee"/>
+      <text x="180" y="460" font-size="12" fill="#ccc" text-anchor="middle">(agent / chat response area)</text>
+
+      <line x1="0" y1="630" x2="360" y2="630" stroke="#333"/>
+
+      <!-- message box -->
+      <rect x="20" y="645" width="320" height="60" fill="none" stroke="#333"/>
+      <text x="32" y="670" font-size="13" fill="#888">Type message</text>
+      <circle cx="320" cy="683" r="9" fill="none" stroke="#333"/>
+      <text x="316" y="687" font-size="10">&#10148;</text>
+      <line x1="0" y1="712" x2="360" y2="712" stroke="#333"/>
+
+      <!-- bottom tabs -->
+      <rect x="0" y="712" width="120" height="46" fill="none" stroke="#333"/>
+      <text x="35" y="740" font-size="13">Projects</text>
+      <rect x="120" y="712" width="120" height="46" fill="none" stroke="#333"/>
+      <text x="138" y="740" font-size="13">Terminals</text>
+      <rect x="240" y="712" width="120" height="46" fill="none" stroke="#333"/>
+      <text x="263" y="740" font-size="13">Remote</text>
+    </svg>
+  </div>
+  <div class="docs">
+    <h3>Documentation</h3>
+    <ul>
+      <li>Full-screen layout. Header row contains: <span class="tag">&#9776; hamburger</span> (opens the slide-in menu — see Screens 4 &amp; 5), the <span class="tag">Search Bar</span>, and <span class="tag">Close</span> / <span class="tag">Stop</span> controls at top-right (Stop halts an in-progress agent action).</li>
+      <li><span class="tag">Ctrl+A</span> performs "select all" within search results.</li>
+      <li>Below the search bar is a <span class="tag">File search</span> / <span class="tag">grep</span> mode toggle.</li>
+      <li>Search results render in a GitHub-like file list view, supporting <code>.cpp</code> file display. Long-press makes entries selectable, and a selection range can be defined.</li>
+      <li>Below results is a <span class="tag">Cursor responses</span> panel — the main flexible area showing AI/agent responses tied to cursor context, with a vertical scroll indicator on the right edge.</li>
+      <li>A message input box ("Type message") with a send icon (➤) is pinned above the bottom navigation — this is the agent chat input.</li>
+      <li>Bottom navigation has three full-width tabs: <strong>Projects</strong>, <strong>Terminals</strong>, <strong>Remote</strong> (consistent across all screens).</li>
+      <li><strong>Behavior — Project tab, when searching:</strong> the agent window collapses to just the message window; the "other" (search/results) area takes ~60% of viewport height (vh).</li>
+      <li><strong>Behavior — when referencing files:</strong> when the user is in the file-select section (including doing a full file select on top), the agent panel takes ~60% and only the search bar stays visible at top.</li>
+      <li>The <code>@</code> file-reference selector still works inside agent chat (distinct from the cursor-select-vs-reference mechanism described above).</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SCREEN 2 -->
+<div class="screen">
+  <div class="screen-header">2. Terminals Tab</div>
+  <div class="wireframe">
+    <svg viewBox="0 0 360 760" width="320" height="676" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="356" height="756" rx="16" fill="#fff" stroke="#333" stroke-width="2"/>
+
+      <!-- status bar -->
+      <text x="20" y="24" font-size="11" fill="#999">9:41</text>
+      <text x="320" y="24" font-size="11" fill="#999" text-anchor="end">100%</text>
+
+      <!-- header -->
+      <line x1="0" y1="36" x2="360" y2="36" stroke="#ddd"/>
+      <text x="22" y="58" font-size="18">&#9776;</text>
+      <text x="150" y="58" font-size="15" font-weight="600" text-anchor="middle">Terminals</text>
+      <line x1="0" y1="80" x2="360" y2="80" stroke="#333"/>
+
+      <!-- terminal output area -->
+      <rect x="20" y="95" width="320" height="290" fill="#fdfdfd" stroke="#333"/>
+      <text x="32" y="120" font-family="monospace" font-size="14">C:/ ---&gt; _</text>
+      <text x="32" y="145" font-family="monospace" font-size="14">C:/ ---&gt; echo "I'm the best"</text>
+      <line x1="0" y1="400" x2="360" y2="400" stroke="#333"/>
+
+      <!-- selected terminal bar -->
+      <rect x="30" y="415" width="280" height="32" rx="6" fill="none" stroke="#333"/>
+      <text x="45" y="436" font-size="13">Selected Terminal</text>
+      <text x="280" y="436" font-size="14">+ &#128465;</text>
+
+      <!-- terminal list -->
+      <line x1="30" y1="465" x2="290" y2="465" stroke="#999"/>
+      <line x1="30" y1="495" x2="270" y2="495" stroke="#999"/>
+      <line x1="30" y1="525" x2="250" y2="525" stroke="#999"/>
+      <line x1="30" y1="555" x2="260" y2="555" stroke="#999"/>
+      <rect x="318" y="415" width="14" height="160" fill="none" stroke="#999"/>
+      <text x="290" y="455" font-size="9" fill="#888">scrollable</text>
+      <text x="290" y="467" font-size="9" fill="#888">terminal</text>
+      <text x="290" y="479" font-size="9" fill="#888">list</text>
+
+      <line x1="0" y1="630" x2="360" y2="630" stroke="#333"/>
+      <rect x="20" y="645" width="320" height="60" fill="none" stroke="#ccc" stroke-dasharray="4"/>
+      <text x="32" y="670" font-size="12" fill="#ccc">(message bar — hidden on Terminals)</text>
+      <line x1="0" y1="712" x2="360" y2="712" stroke="#333"/>
+
+      <!-- bottom tabs -->
+      <rect x="0" y="712" width="120" height="46" fill="none" stroke="#333"/>
+      <text x="35" y="740" font-size="13">Projects</text>
+      <rect x="120" y="712" width="120" height="46" fill="#eef2f7" stroke="#333"/>
+      <text x="138" y="740" font-size="13" font-weight="600">Terminals</text>
+      <rect x="240" y="712" width="120" height="46" fill="none" stroke="#333"/>
+      <text x="263" y="740" font-size="13">Remote</text>
+    </svg>
+  </div>
+  <div class="docs">
+    <h3>Documentation</h3>
+    <ul>
+      <li>Same header chrome: <span class="tag">&#9776; hamburger</span> top-left, "Terminals" title.</li>
+      <li>Main pane is a live terminal output area showing a command prompt (<code>C:/ ---&gt;</code>), demonstrated with <code>echo "I'm the best"</code>.</li>
+      <li>Below the output is a <span class="tag">Selected Terminal</span> bar with a <strong>+</strong> (new terminal) and 🗑 (delete terminal) action.</li>
+      <li>A scrollable <strong>terminal list</strong> appears below the selected-terminal bar, allowing switching between multiple open terminal sessions.</li>
+      <li>Bottom navigation: <strong>Projects | Terminals (active) | Remote</strong>.</li>
+      <li><strong>SSH behavior:</strong> terminals support SSH, with VS-Code-like add/delete (➕ / 🗑) controls for managing connections. After establishing an SSH session, the terminal automatically navigates (<code>cd</code>) into the current project directory.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SCREEN 3 -->
+<div class="screen">
+  <div class="screen-header">3. Remote Tab — Screen + Controls (Trackpad tab vs Keyboard tab)</div>
+  <div class="wireframe" style="gap:16px;">
+
+    <!-- VARIANT A: Trackpad tab active -->
+    <svg viewBox="0 0 360 760" width="280" height="591" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="356" height="756" rx="16" fill="#fff" stroke="#333" stroke-width="2"/>
+      <text x="20" y="24" font-size="11" fill="#999">9:41</text>
+      <text x="320" y="24" font-size="11" fill="#999" text-anchor="end">100%</text>
+      <line x1="0" y1="36" x2="360" y2="36" stroke="#ddd"/>
+      <text x="22" y="58" font-size="18">&#9776;</text>
+      <text x="150" y="58" font-size="15" font-weight="600" text-anchor="middle">Remote</text>
+      <line x1="0" y1="80" x2="360" y2="80" stroke="#333"/>
+      <rect x="20" y="95" width="320" height="270" fill="#fafafa" stroke="#333"/>
+      <text x="130" y="225" font-size="14" fill="#555">Screen with pointer</text>
+      <text x="300" y="113" font-size="11" fill="#888">~50%</text>
+      <line x1="0" y1="375" x2="360" y2="375" stroke="#333"/>
+      <text x="22" y="398" font-size="13" font-weight="600">Controls</text>
+      <text x="300" y="398" font-size="11" fill="#888">~50%</text>
+      <rect x="20" y="410" width="320" height="200" fill="none" stroke="#333"/>
+      <text x="135" y="500" font-size="13" fill="#555">Trackpad area</text>
+      <rect x="60" y="540" width="100" height="26" fill="none" stroke="#333"/>
+      <text x="80" y="558" font-size="11">Left</text>
+      <rect x="200" y="540" width="100" height="26" fill="none" stroke="#333"/>
+      <text x="215" y="558" font-size="11">Right</text>
+      <line x1="0" y1="618" x2="360" y2="618" stroke="#333"/>
+      <rect x="20" y="618" width="160" height="34" fill="#eef2f7" stroke="#333"/>
+      <text x="55" y="640" font-size="12" font-weight="600">Trackpad</text>
+      <rect x="180" y="618" width="160" height="34" fill="none" stroke="#333"/>
+      <text x="218" y="640" font-size="12">Keyboard</text>
+      <line x1="0" y1="712" x2="360" y2="712" stroke="#333"/>
+      <rect x="0" y="712" width="120" height="46" fill="none" stroke="#333"/><text x="35" y="740" font-size="12">Projects</text>
+      <rect x="120" y="712" width="120" height="46" fill="none" stroke="#333"/><text x="138" y="740" font-size="12">Terminals</text>
+      <rect x="240" y="712" width="120" height="46" fill="#eef2f7" stroke="#333"/><text x="263" y="740" font-size="12" font-weight="600">Remote</text>
+    </svg>
+
+    <!-- VARIANT B: Keyboard tab active -->
+    <svg viewBox="0 0 360 760" width="280" height="591" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="356" height="756" rx="16" fill="#fff" stroke="#333" stroke-width="2"/>
+      <text x="20" y="24" font-size="11" fill="#999">9:41</text>
+      <text x="320" y="24" font-size="11" fill="#999" text-anchor="end">100%</text>
+      <line x1="0" y1="36" x2="360" y2="36" stroke="#ddd"/>
+      <text x="22" y="58" font-size="18">&#9776;</text>
+      <text x="150" y="58" font-size="15" font-weight="600" text-anchor="middle">Remote</text>
+      <line x1="0" y1="80" x2="360" y2="80" stroke="#333"/>
+      <rect x="20" y="95" width="320" height="270" fill="#fafafa" stroke="#333"/>
+      <text x="130" y="225" font-size="14" fill="#555">Screen with pointer</text>
+      <text x="300" y="113" font-size="11" fill="#888">~50%</text>
+      <line x1="0" y1="375" x2="360" y2="375" stroke="#333"/>
+      <text x="22" y="398" font-size="13" font-weight="600">Controls</text>
+      <text x="300" y="398" font-size="11" fill="#888">~50%</text>
+
+      <!-- Keyboard active panel -->
+      <rect x="20" y="410" width="320" height="200" fill="none" stroke="#333"/>
+      <text x="35" y="437" font-size="16" fill="#333">Fn: special keyboard</text>
+      <text x="55" y="461" font-size="16" fill="#333">keys, Fn to shift etc.</text>
+      <text x="35" y="486" font-size="16" fill="#333">$#: special chars</text>
+      <text x="35" y="511" font-size="16" fill="#333">123: number</text>
+
+      <line x1="20" y1="540" x2="340" y2="540" stroke="#333"/>
+
+      <!-- key row: Fn / $# / 123  x + check -->
+      <rect x="32" y="552" width="60" height="40" fill="none" stroke="#333"/><text x="50" y="578" font-size="14">Fn</text>
+      <rect x="100" y="552" width="60" height="40" fill="none" stroke="#333"/><text x="116" y="578" font-size="14">$#</text>
+      <rect x="168" y="552" width="60" height="40" fill="none" stroke="#333"/><text x="180" y="578" font-size="14">123</text>
+      <text x="248" y="580" font-size="20">x</text>
+      <text x="278" y="580" font-size="20">+</text>
+      <text x="312" y="580" font-size="20">&#10003;</text>
+
+      <!-- two sub-tabs: Trackpad / Keyboard -->
+      <line x1="0" y1="618" x2="360" y2="618" stroke="#333"/>
+      <rect x="20" y="618" width="160" height="34" fill="none" stroke="#333"/>
+      <text x="55" y="640" font-size="12">Trackpad</text>
+      <rect x="180" y="618" width="160" height="34" fill="#eef2f7" stroke="#333"/>
+      <text x="218" y="640" font-size="12" font-weight="600">Keyboard</text>
+      <line x1="0" y1="712" x2="360" y2="712" stroke="#333"/>
+      <rect x="0" y="712" width="120" height="46" fill="none" stroke="#333"/><text x="35" y="740" font-size="12">Projects</text>
+      <rect x="120" y="712" width="120" height="46" fill="none" stroke="#333"/><text x="138" y="740" font-size="12">Terminals</text>
+      <rect x="240" y="712" width="120" height="46" fill="#eef2f7" stroke="#333"/><text x="263" y="740" font-size="12" font-weight="600">Remote</text>
+    </svg>
+
+  </div>
+  <div class="docs">
+    <h3>Documentation</h3>
+    <ul>
+      <li>Same header chrome: <span class="tag">&#9776; hamburger</span> top-left, "Remote" title.</li>
+      <li>Body splits roughly: <strong>top ~50%</strong> = "Screen with pointer" (the remote desktop/device view, live cursor shown over it), <strong>bottom ~50%</strong> = Controls.</li>
+      <li><strong>Controls area has two sub-tabs at its bottom edge: <span class="tag">Trackpad</span> and <span class="tag">Keyboard</span>.</strong> Only one is shown at a time, swapping the content of the controls panel above the tabs:
+        <ul>
+          <li><strong>Trackpad tab (left wireframe):</strong> shows the Trackpad area plus <strong>Left</strong> / <strong>Right</strong> click buttons.</li>
+          <li><strong>Keyboard tab (right wireframe, per original reference):</strong> shows the three special-key categories and their buttons:
+            <ul>
+              <li><span class="tag">Fn</span> — special keyboard keys; Fn acts as a shift/modifier layer, etc.</li>
+              <li><span class="tag">$#</span> — special characters</li>
+              <li><span class="tag">123</span> — number row</li>
+            </ul>
+            Alongside the three key buttons are three actions: <span class="tag">x</span>, <span class="tag">+</span>, <span class="tag">&#10003;</span>.
+          </li>
+        </ul>
+      </li>
+      <li><strong>Input trigger flow:</strong> in either tab, interactions are staged (typed/clicked/composed). <strong>x</strong> cancels the staged input without sending. <strong>+</strong> adds/builds up the staged key combination (e.g. composing a modifier + key combo). Pressing <strong>&#10003; (tick)</strong> sends the composed input as actual keystroke/input events to the remote session.</li>
+      <li>Same bottom nav: <strong>Projects | Terminals | Remote (active)</strong>.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SCREEN 4 -->
+<div class="screen">
+  <div class="screen-header">4. Hamburger Menu — Workspace Panel (FTP Navigator)</div>
+  <div class="wireframe">
+    <svg viewBox="0 0 360 760" width="320" height="676" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="356" height="756" rx="16" fill="#fff" stroke="#333" stroke-width="2"/>
+
+      <!-- status bar -->
+      <text x="20" y="24" font-size="11" fill="#999">9:41</text>
+      <text x="320" y="24" font-size="11" fill="#999" text-anchor="end">100%</text>
+
+      <!-- panel header tabs -->
+      <line x1="0" y1="36" x2="360" y2="36" stroke="#ddd"/>
+      <rect x="0" y="40" width="180" height="40" fill="#eef2f7" stroke="#333"/><text x="30" y="65" font-size="14" font-weight="600">Workspace</text>
+      <rect x="180" y="40" width="180" height="40" fill="none" stroke="#333"/><text x="255" y="65" font-size="14">Git</text>
+      <text x="332" y="38" font-size="14">x</text>
+      <text x="305" y="36" font-size="9" fill="#888">close</text>
+      <text x="305" y="92" font-size="9" fill="#888">git graph</text>
+      <line x1="335" y1="80" x2="335" y2="88" stroke="#888"/>
+      <line x1="0" y1="80" x2="360" y2="80" stroke="#333"/>
+
+      <!-- current workspace selector -->
+      <rect x="20" y="95" width="320" height="34" fill="none" stroke="#333"/>
+      <text x="32" y="117" font-size="13">Current workspace &#9662;</text>
+
+      <!-- recent items -->
+      <rect x="20" y="140" width="320" height="30" fill="none" stroke="#333"/>
+      <text x="32" y="160" font-size="12" fill="#999">Recent / pinned item</text>
+      <rect x="20" y="180" width="320" height="30" fill="none" stroke="#333"/>
+      <text x="32" y="200" font-size="12" fill="#999">Recent / pinned item</text>
+
+      <!-- FTP navigator section -->
+      <text x="20" y="245" font-size="15" font-weight="600">FTP Navigator</text>
+      <rect x="20" y="260" width="320" height="280" fill="#fcfcfc" stroke="#eee"/>
+      <text x="170" y="405" font-size="12" fill="#ccc" text-anchor="middle">(remote file/folder tree)</text>
+
+      <!-- FTP path + select + new folder/file -->
+      <rect x="20" y="555" width="320" height="32" fill="none" stroke="#333"/>
+      <text x="32" y="576" font-size="12">FTP Path</text>
+
+      <rect x="20" y="600" width="150" height="32" fill="none" stroke="#333"/><text x="55" y="621" font-size="12">Select</text>
+      <rect x="190" y="600" width="150" height="32" fill="none" stroke="#333"/><text x="205" y="621" font-size="12">+ New folder</text>
+
+      <rect x="105" y="645" width="150" height="32" fill="none" stroke="#333"/><text x="135" y="666" font-size="12">+ New file</text>
+
+      <line x1="0" y1="712" x2="360" y2="712" stroke="#333"/>
+      <rect x="0" y="712" width="120" height="46" fill="none" stroke="#333"/><text x="35" y="740" font-size="12">Projects</text>
+      <rect x="120" y="712" width="120" height="46" fill="none" stroke="#333"/><text x="138" y="740" font-size="12">Terminals</text>
+      <rect x="240" y="712" width="120" height="46" fill="none" stroke="#333"/><text x="263" y="740" font-size="12">Remote</text>
+    </svg>
+  </div>
+  <div class="docs">
+    <h3>Documentation</h3>
+    <ul>
+      <li>This is the full-screen panel opened by the <span class="tag">&#9776; hamburger</span> from any screen — it overlays/replaces the main view. Two top tabs: <strong>Workspace</strong> (active here) and <strong>Git</strong> (Screen 5).</li>
+      <li><span class="tag">x</span> (close) button top-right closes the panel and returns to the previous screen. A small "git graph" indicator sits near the top-right corner as a quick-access shortcut into the Git tab's commit graph.</li>
+      <li><strong>Current workspace ▾</strong> — dropdown selector to switch between workspaces.</li>
+      <li>Below the selector: a list of recent/pinned workspace items.</li>
+      <li><strong>FTP Navigator</strong> — main scrollable area showing the remote file/folder tree for the connected FTP/remote target.</li>
+      <li>Bottom action row:
+        <ul>
+          <li><span class="tag">FTP Path</span> — input field showing/editing the current remote path.</li>
+          <li><span class="tag">Select</span> — choose/confirm the FTP path.</li>
+          <li><span class="tag">+ New folder</span> — create folder at current FTP path.</li>
+          <li><span class="tag">+ New file</span> — create file at current FTP path.</li>
+        </ul>
+      </li>
+      <li>Bottom nav (Projects | Terminals | Remote) remains visible/consistent even while this panel is open.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SCREEN 5 -->
+<div class="screen">
+  <div class="screen-header">5. Hamburger Menu — Git Tab</div>
+  <div class="wireframe">
+    <svg viewBox="0 0 360 760" width="320" height="676" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="356" height="756" rx="16" fill="#fff" stroke="#333" stroke-width="2"/>
+
+      <!-- status bar -->
+      <text x="20" y="24" font-size="11" fill="#999">9:41</text>
+      <text x="320" y="24" font-size="11" fill="#999" text-anchor="end">100%</text>
+
+      <!-- panel header tabs -->
+      <line x1="0" y1="36" x2="360" y2="36" stroke="#ddd"/>
+      <rect x="0" y="40" width="180" height="40" fill="none" stroke="#333"/><text x="30" y="65" font-size="14">Workspace</text>
+      <rect x="180" y="40" width="180" height="40" fill="#eef2f7" stroke="#333"/><text x="255" y="65" font-size="14" font-weight="600">Git</text>
+      <text x="332" y="38" font-size="14">x</text>
+      <text x="305" y="36" font-size="9" fill="#888">close</text>
+      <line x1="0" y1="80" x2="360" y2="80" stroke="#333"/>
+
+      <!-- commit msg input + commit btn -->
+      <rect x="20" y="95" width="220" height="34" fill="none" stroke="#333"/>
+      <text x="32" y="117" font-size="12">Commit msg + &#8629;</text>
+      <rect x="250" y="95" width="90" height="34" fill="none" stroke="#333"/>
+      <text x="263" y="117" font-size="12">&#10003; Commit</text>
+      <text x="20" y="148" font-size="9" fill="#888">Quick actions: add, stash, discard, commit, sync</text>
+
+      <!-- file diff list -->
+      <text x="20" y="180" font-size="13" font-weight="600">Changed files</text>
+      <rect x="20" y="190" width="300" height="110" fill="#fcfcfc" stroke="#eee"/>
+      <rect x="28" y="200" width="240" height="24" fill="none" stroke="#333"/>
+      <text x="36" y="217" font-size="11">File</text>
+      <text x="260" y="217" font-size="11">+ &#8629;</text>
+      <line x1="28" y1="235" x2="248" y2="235" stroke="#999"/>
+      <line x1="28" y1="260" x2="238" y2="260" stroke="#999"/>
+      <rect x="332" y="190" width="14" height="110" fill="none" stroke="#999"/>
+      <text x="295" y="305" font-size="9" fill="#888">scrollable list</text>
+
+      <line x1="0" y1="312" x2="360" y2="312" stroke="#333"/>
+
+      <!-- command input -->
+      <rect x="20" y="328" width="320" height="36" rx="8" fill="none" stroke="#333"/>
+      <text x="35" y="351" font-size="12">Command input &#8629;</text>
+
+      <line x1="0" y1="378" x2="360" y2="378" stroke="#333"/>
+
+      <!-- branch dropdown + select -->
+      <rect x="20" y="395" width="180" height="32" fill="none" stroke="#333"/>
+      <text x="32" y="416" font-size="12">Branch &#9662;</text>
+      <rect x="215" y="395" width="125" height="32" fill="none" stroke="#333"/>
+      <text x="255" y="416" font-size="12">Select</text>
+      <text x="20" y="442" font-size="9" fill="#888">Branch dropdown</text>
+      <text x="260" y="442" font-size="9" fill="#888">"Select" triggers branch change</text>
+
+      <!-- commit list -->
+      <text x="20" y="470" font-size="13" font-weight="600">Commit history</text>
+      <rect x="20" y="480" width="320" height="220" fill="#fcfcfc" stroke="#eee"/>
+      <circle cx="38" cy="505" r="3" fill="#333"/><text x="50" y="509" font-size="11">some commit</text>
+      <circle cx="38" cy="535" r="3" fill="#333"/><line x1="50" y1="535" x2="190" y2="535" stroke="#999"/>
+      <circle cx="38" cy="565" r="3" fill="#333"/><line x1="50" y1="565" x2="180" y2="565" stroke="#999"/>
+      <circle cx="38" cy="595" r="3" fill="#333"/><line x1="50" y1="595" x2="200" y2="595" stroke="#999"/>
+      <line x1="38" y1="508" x2="38" y2="595" stroke="#ccc"/>
+      <text x="290" y="585" font-size="9" fill="#888">commits</text>
+
+      <line x1="0" y1="712" x2="360" y2="712" stroke="#333"/>
+      <rect x="0" y="712" width="120" height="46" fill="none" stroke="#333"/><text x="35" y="740" font-size="12">Projects</text>
+      <rect x="120" y="712" width="120" height="46" fill="none" stroke="#333"/><text x="138" y="740" font-size="12">Terminals</text>
+      <rect x="240" y="712" width="120" height="46" fill="none" stroke="#333"/><text x="263" y="740" font-size="12">Remote</text>
+    </svg>
+  </div>
+  <div class="docs">
+    <h3>Documentation</h3>
+    <ul>
+      <li>Same full-screen hamburger panel as Screen 4, with the <strong>Git</strong> tab active (Workspace | <strong>Git</strong>).</li>
+      <li><strong>Commit message input</strong> (with ⏎ shortcut) next to a <strong>✓ Commit</strong> button.</li>
+      <li>Quick git actions accessible from this view: <span class="tag">add</span>, <span class="tag">stash</span>, <span class="tag">discard</span>, <span class="tag">commit</span>, <span class="tag">sync</span>.</li>
+      <li><strong>Changed files</strong> — scrollable list of modified files, each with a <strong>+ ⏎</strong> action (stage file).</li>
+      <li><strong>Command input</strong> field (rounded, with ⏎ to execute) — allows running raw git commands.</li>
+      <li><strong>Branch dropdown</strong> ("Branch ▾") on the left and a <strong>Select</strong> button on the right; pressing Select on a chosen branch triggers a branch switch.</li>
+      <li><strong>Commit history</strong> — scrollable git log/graph (e.g., "some commit" + further entries).</li>
+      <li>Same <span class="tag">x</span> close button top-right returns to the previous main screen; bottom nav remains consistent.</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+</body>
+</html>
