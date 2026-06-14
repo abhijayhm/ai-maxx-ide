@@ -58,6 +58,14 @@ class AgentNotifier extends Notifier<AgentState> {
   @override
   AgentState build() {
     ref.onDispose(_disconnect);
+    ref.listen(
+      agentSessionsProvider.select((s) => s.activeId),
+      (previous, next) {
+        if (next != null && next != previous) {
+          Future.microtask(() => loadSessionMessages(next));
+        }
+      },
+    );
     return const AgentState();
   }
 
@@ -103,6 +111,29 @@ class AgentNotifier extends Notifier<AgentState> {
     final sessionId = ref.read(agentSessionsProvider).activeId;
     _client?.stop(sessionId: sessionId);
     state = state.copyWith(running: false, clearRunningSession: true);
+  }
+
+  Future<void> loadSessionMessages(int sessionId) async {
+    try {
+      final repo = await ref.read(agentRepositoryProvider.future);
+      final stored = await repo.fetchMessages(sessionId);
+      final events = <AgentEvent>[];
+      for (final message in stored) {
+        final event = AgentEvent.fromStoredMessage(
+          message.sender,
+          message.payload,
+        );
+        if (event != null) {
+          events.add(event);
+        }
+      }
+      state = state.copyWith(
+        messagesBySession: {...state.messagesBySession, sessionId: events},
+        clearError: true,
+      );
+    } catch (error) {
+      state = state.copyWith(error: error.toString());
+    }
   }
 
   Future<void> _ensureConnected() async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -44,9 +46,10 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen> {
       child: Column(
         children: [
           Expanded(
-            flex: 5,
+            flex: 2,
             child: _VideoPane(
               colors: colors,
+              loading: remote.isLoading,
               connecting: remote.connecting,
               connected: remote.connected,
               videoReady: remote.videoReady,
@@ -65,7 +68,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen> {
               onClear: () => ref.read(remoteProvider.notifier).clearStaging(),
             ),
           Expanded(
-            flex: 4,
+            flex: 3,
             child: Column(
               children: [
                 Row(
@@ -87,8 +90,13 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen> {
                       ? _TrackpadPanel(
                           colors: colors,
                           enabled: remote.connected,
-                          onPointerMove: (x, y) =>
-                              ref.read(remoteProvider.notifier).pointerMove(x, y),
+                          sensitivity: remote.trackpadSensitivity,
+                          onSensitivityChanged: (value) => ref
+                              .read(remoteProvider.notifier)
+                              .setTrackpadSensitivity(value),
+                          onSwipeDelta: (dx, dy) => ref
+                              .read(remoteProvider.notifier)
+                              .pointerDelta(dx, dy),
                           onClick: () =>
                               ref.read(remoteProvider.notifier).click(button: 'left'),
                           onRightClick: () =>
@@ -96,9 +104,9 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen> {
                         )
                       : RemoteKeyboard(
                           controller: _keyboardController,
-                          onKey: (value, modifiers) => ref
+                          onCommit: (keys, modifiers) => ref
                               .read(remoteProvider.notifier)
-                              .sendKey(value, modifiers: modifiers),
+                              .commitKeys(keys, modifiers),
                         ),
                 ),
               ],
@@ -113,6 +121,7 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen> {
 class _VideoPane extends StatelessWidget {
   const _VideoPane({
     required this.colors,
+    required this.loading,
     required this.connecting,
     required this.connected,
     required this.videoReady,
@@ -124,6 +133,7 @@ class _VideoPane extends StatelessWidget {
   });
 
   final WorkbenchColors colors;
+  final bool loading;
   final bool connecting;
   final bool connected;
   final bool videoReady;
@@ -139,68 +149,94 @@ class _VideoPane extends StatelessWidget {
       color: const Color(0xFF0F0F0F),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          if (videoReady && renderer != null && renderer!.srcObject != null) {
-            return GestureDetector(
-              onPanUpdate: (details) {
-                final x =
-                    (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
-                final y =
-                    (details.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0);
-                onPointerMove(x, y);
-              },
-              onTap: onClick,
-              child: RTCVideoView(
-                renderer!,
-                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
-              ),
-            );
-          }
+          final hasVideo =
+              videoReady && renderer != null && renderer!.srcObject != null;
 
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (connecting)
-                  const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  Icon(
-                    Icons.desktop_windows_outlined,
-                    size: 48,
-                    color: colors.fgInactive,
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              if (hasVideo)
+                GestureDetector(
+                  onPanUpdate: (details) {
+                    final x = (details.localPosition.dx / constraints.maxWidth)
+                        .clamp(0.0, 1.0);
+                    final y = (details.localPosition.dy / constraints.maxHeight)
+                        .clamp(0.0, 1.0);
+                    onPointerMove(x, y);
+                  },
+                  onTap: onClick,
+                  child: RTCVideoView(
+                    renderer!,
+                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
                   ),
-                const SizedBox(height: 12),
-                Text(
-                  connecting
-                      ? 'Connecting remote desktop…'
-                      : connected && !videoReady
-                          ? 'Waiting for video stream…'
-                          : 'Remote desktop',
-                  style: TextStyle(color: colors.fgMuted, fontSize: 13),
+                )
+              else
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.desktop_windows_outlined,
+                        size: 48,
+                        color: colors.fgInactive,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        connecting
+                            ? 'Connecting remote desktop…'
+                            : connected && !videoReady
+                                ? 'Waiting for video stream…'
+                                : 'Remote desktop',
+                        style: TextStyle(color: colors.fgMuted, fontSize: 13),
+                      ),
+                      if (error != null) ...[
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Text(
+                            error!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: colors.statusError,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (!loading) ...[
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: onReconnect,
+                          child: const Text('Reconnect'),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-                if (error != null) ...[
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Text(
-                      error!,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: colors.statusError, fontSize: 12),
+              if (loading)
+                ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          connecting
+                              ? 'Connecting remote desktop…'
+                              : 'Starting video stream…',
+                          style: TextStyle(color: colors.fgDefault, fontSize: 13),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-                if (!connecting) ...[
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: onReconnect,
-                    child: const Text('Reconnect'),
-                  ),
-                ],
-              ],
-            ),
+                ),
+            ],
           );
         },
       ),
@@ -285,20 +321,130 @@ class _RemoteTabButton extends StatelessWidget {
   }
 }
 
-class _TrackpadPanel extends StatelessWidget {
+class _TrackpadPanel extends StatefulWidget {
   const _TrackpadPanel({
     required this.colors,
     required this.enabled,
-    required this.onPointerMove,
+    required this.sensitivity,
+    required this.onSensitivityChanged,
+    required this.onSwipeDelta,
     required this.onClick,
     required this.onRightClick,
   });
 
   final WorkbenchColors colors;
   final bool enabled;
-  final void Function(double x, double y) onPointerMove;
+  final double sensitivity;
+  final ValueChanged<double> onSensitivityChanged;
+  final void Function(double dx, double dy) onSwipeDelta;
   final VoidCallback onClick;
   final VoidCallback onRightClick;
+
+  @override
+  State<_TrackpadPanel> createState() => _TrackpadPanelState();
+}
+
+class _TrackpadPanelState extends State<_TrackpadPanel> {
+  static const _sendInterval = Duration(milliseconds: 33); // ~30 Hz
+
+  double _pendingDx = 0;
+  double _pendingDy = 0;
+  Timer? _sendTimer;
+
+  @override
+  void dispose() {
+    _stopSendLoop(flush: true);
+    super.dispose();
+  }
+
+  void _openSettings() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: widget.colors.elevated,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder: (context) {
+        var value = widget.sensitivity;
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Trackpad sensitivity',
+                    style: TextStyle(
+                      color: widget.colors.fgStrong,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Higher values move the pointer faster.',
+                    style: TextStyle(color: widget.colors.fgMuted, fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Slider(
+                          value: value,
+                          min: 0.25,
+                          max: 4.0,
+                          divisions: 15,
+                          label: value.toStringAsFixed(2),
+                          onChanged: (next) {
+                            setSheetState(() => value = next);
+                            widget.onSensitivityChanged(next);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 44,
+                        child: Text(
+                          value.toStringAsFixed(2),
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            color: widget.colors.fgDefault,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _flushDelta() {
+    if (_pendingDx == 0 && _pendingDy == 0) {
+      return;
+    }
+    widget.onSwipeDelta(_pendingDx, _pendingDy);
+    _pendingDx = 0;
+    _pendingDy = 0;
+  }
+
+  void _startSendLoop() {
+    _sendTimer ??= Timer.periodic(_sendInterval, (_) => _flushDelta());
+  }
+
+  void _stopSendLoop({bool flush = false}) {
+    _sendTimer?.cancel();
+    _sendTimer = null;
+    if (flush) {
+      _flushDelta();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -306,34 +452,63 @@ class _TrackpadPanel extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          return GestureDetector(
-            onPanUpdate: enabled
-                ? (details) {
-                    final x = (details.localPosition.dx / constraints.maxWidth)
-                        .clamp(0.0, 1.0);
-                    final y = (details.localPosition.dy / constraints.maxHeight)
-                        .clamp(0.0, 1.0);
-                    onPointerMove(x, y);
-                  }
-                : null,
-            onTap: enabled ? onClick : null,
-            onLongPress: enabled ? onRightClick : null,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: colors.input,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: colors.borderDefault),
-              ),
-              child: Center(
-                child: Text(
-                  enabled
-                      ? 'Drag to move pointer · tap = left click · long-press = right'
-                      : 'Connect remote desktop to use trackpad',
-                  style: TextStyle(color: colors.fgMuted, fontSize: 13),
-                  textAlign: TextAlign.center,
+          return Stack(
+            children: [
+              GestureDetector(
+                onPanStart: widget.enabled ? (_) => _startSendLoop() : null,
+                onPanUpdate: widget.enabled
+                    ? (details) {
+                        _pendingDx +=
+                            details.delta.dx / constraints.maxWidth * widget.sensitivity;
+                        _pendingDy +=
+                            details.delta.dy / constraints.maxHeight * widget.sensitivity;
+                      }
+                    : null,
+                onPanEnd: widget.enabled ? (_) => _stopSendLoop(flush: true) : null,
+                onPanCancel: widget.enabled ? () => _stopSendLoop(flush: true) : null,
+                onTap: widget.enabled ? widget.onClick : null,
+                onLongPress: widget.enabled ? widget.onRightClick : null,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: widget.colors.input,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: widget.colors.borderDefault),
+                  ),
+                  child: SizedBox.expand(
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          widget.enabled
+                              ? 'Drag to move pointer\nTap = Left Click, Long Tap = Right Click'
+                              : 'Connect remote desktop to use trackpad',
+                          style: TextStyle(
+                            color: widget.colors.fgMuted,
+                            fontSize: 13,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  onPressed: _openSettings,
+                  icon: Icon(Icons.settings, size: 20, color: widget.colors.fgMuted),
+                  tooltip: 'Trackpad settings',
+                  style: IconButton.styleFrom(
+                    backgroundColor: widget.colors.chrome.withValues(alpha: 0.9),
+                    minimumSize: const Size(32, 32),
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),

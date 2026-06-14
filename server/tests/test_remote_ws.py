@@ -16,6 +16,9 @@ async def test_remote_ws_auth_and_input(api_key, registered_device, device_hash)
     connected, _ = await communicator.connect()
     assert connected
 
+    response = await communicator.receive_json_from(timeout=5)
+    assert response["type"] == "auth_ok"
+
     await communicator.send_json_to(
         {
             "type": "input_batch",
@@ -48,6 +51,9 @@ async def test_remote_ws_signaling(api_key, registered_device, device_hash):
     communicator = WebsocketCommunicator(application, url)
     connected, _ = await communicator.connect()
     assert connected
+
+    response = await communicator.receive_json_from(timeout=5)
+    assert response["type"] == "auth_ok"
 
     await communicator.send_json_to({"type": "offer", "sdp": "fake-sdp"})
     response = await communicator.receive_json_from(timeout=5)

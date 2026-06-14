@@ -9,6 +9,8 @@ typedef RemoteStateCallback = void Function({
   bool? videoReady,
   String? error,
   bool clearError,
+  double? pointerX,
+  double? pointerY,
 });
 
 /// Remote desktop WebSocket + WebRTC client (`/api/ws/remote/`).
@@ -47,12 +49,19 @@ class RemoteClient {
   int get stagedCount => _stagedCount;
   Stream<Map<String, dynamic>> get messages => _ws.messages;
 
-  void _notify({String? error, bool clearError = false}) {
+  void _notify({
+    String? error,
+    bool clearError = false,
+    double? pointerX,
+    double? pointerY,
+  }) {
     onStateChanged?.call(
       connected: _connected,
       videoReady: _videoReady,
       error: error,
       clearError: clearError,
+      pointerX: pointerX,
+      pointerY: pointerY,
     );
   }
 
@@ -79,6 +88,12 @@ class RemoteClient {
     } else if (type == 'staging_cleared') {
       _stagedCount = 0;
       _notify();
+    } else if (type == 'pointer_position') {
+      final x = (frame['x'] as num?)?.toDouble();
+      final y = (frame['y'] as num?)?.toDouble();
+      if (x != null && y != null) {
+        _notify(pointerX: x, pointerY: y);
+      }
     } else if (type == 'answer' || type == 'ice_candidate') {
       await _webrtc.handleSignalingFrame(frame);
       if (_webrtc.videoReady) {
@@ -116,6 +131,19 @@ class RemoteClient {
       'type': 'input_batch',
       'events': [
         {'op': 'click', 'button': button},
+      ],
+      'dispatch': true,
+    });
+  }
+
+  void pointerDelta({required double dx, required double dy}) {
+    if (dx == 0 && dy == 0) {
+      return;
+    }
+    _ws.send({
+      'type': 'input_batch',
+      'events': [
+        {'op': 'pointer_delta', 'dx': dx, 'dy': dy},
       ],
       'dispatch': true,
     });

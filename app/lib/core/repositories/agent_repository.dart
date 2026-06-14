@@ -27,4 +27,40 @@ class AgentRepository {
         .map((item) => AgentModelInfo.fromJson(item as Map<String, dynamic>))
         .toList();
   }
+
+  Future<List<StoredAgentMessage>> fetchMessages(
+    int sessionId, {
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final response = await _api.get<List<dynamic>>(
+      'agent/messages/',
+      queryParameters: {
+        'session_id': sessionId,
+        'limit': limit,
+        'offset': offset,
+      },
+    );
+    final data = response.data ?? [];
+    return data
+        .map((item) => StoredAgentMessage.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+}
+
+class StoredAgentMessage {
+  const StoredAgentMessage({
+    required this.sender,
+    required this.payload,
+  });
+
+  final String sender;
+  final Map<String, dynamic> payload;
+
+  factory StoredAgentMessage.fromJson(Map<String, dynamic> json) {
+    return StoredAgentMessage(
+      sender: json['sender'] as String? ?? '',
+      payload: (json['payload'] as Map<String, dynamic>?) ?? const {},
+    );
+  }
 }

@@ -67,12 +67,30 @@ def execute_batch(events: list[dict], dispatch: bool = False) -> list[dict]:
     return executed
 
 
+def _pointer_result(op: str, abs_x: int, abs_y: int, **extra) -> dict:
+    from remote.cursor import normalize_position, set_cursor_position
+
+    set_cursor_position(abs_x, abs_y)
+    nx, ny = normalize_position(abs_x, abs_y)
+    return {
+        "op": op,
+        "x": abs_x,
+        "y": abs_y,
+        "normalized_x": nx,
+        "normalized_y": ny,
+        "executed": True,
+        **extra,
+    }
+
+
 def _execute_event(event: dict) -> dict:
     op = event.get("op", "")
 
     try:
         if op == "pointer_move":
             return _execute_pointer(event)
+        if op == "pointer_delta":
+            return _execute_pointer_delta(event)
         if op == "click":
             return _execute_click(event)
         if op == "key_combo":
@@ -92,6 +110,8 @@ def execute_combo(keys: list[str]) -> dict:
             "ctrl": Key.ctrl,
             "shift": Key.shift,
             "alt": Key.alt,
+            "meta": Key.cmd,
+            "win": Key.cmd,
             "esc": Key.esc,
             "enter": Key.enter,
             "tab": Key.tab,
@@ -120,21 +140,39 @@ def _execute_pointer(event: dict) -> dict:
     try:
         from pynput.mouse import Controller as MouseController
 
+        from remote.cursor import primary_monitor
+
         mouse = MouseController()
         x, y = event.get("x", 0), event.get("y", 0)
+        monitor = primary_monitor()
         if event.get("normalized"):
-            import mss
-
-            with mss.mss() as sct:
-                monitor = sct.monitors[1]
-                abs_x = int(monitor["left"] + x * monitor["width"])
-                abs_y = int(monitor["top"] + y * monitor["height"])
+            abs_x = int(monitor["left"] + x * monitor["width"])
+            abs_y = int(monitor["top"] + y * monitor["height"])
         else:
             abs_x, abs_y = int(x), int(y)
         mouse.position = (abs_x, abs_y)
-        return {"op": "pointer_move", "x": abs_x, "y": abs_y, "executed": True}
+        return _pointer_result("pointer_move", abs_x, abs_y)
     except ImportError:
         return {"op": "pointer_move", "stub": True, **event}
+
+
+def _execute_pointer_delta(event: dict) -> dict:
+    try:
+        from pynput.mouse import Controller as MouseController
+
+        from remote.cursor import primary_monitor
+
+        mouse = MouseController()
+        monitor = primary_monitor()
+        dx = float(event.get("dx", 0)) * monitor["width"]
+        dy = float(event.get("dy", 0)) * monitor["height"]
+        cur_x, cur_y = mouse.position
+        abs_x = int(cur_x + dx)
+        abs_y = int(cur_y + dy)
+        mouse.position = (abs_x, abs_y)
+        return _pointer_result("pointer_delta", abs_x, abs_y)
+    except ImportError:
+        return {"op": "pointer_delta", "stub": True, **event}
 
 
 def _execute_click(event: dict) -> dict:

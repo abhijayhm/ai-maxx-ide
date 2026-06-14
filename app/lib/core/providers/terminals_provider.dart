@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../terminals/terminal_client.dart';
 import '../terminals/terminal_models.dart';
+import '../terminals/terminal_output_sanitizer.dart';
 import '../terminals/terminal_repository.dart';
 import '../ws/ws_client.dart';
 import 'app_providers.dart';
@@ -203,7 +204,9 @@ class TerminalsNotifier extends Notifier<TerminalsState> {
   }
 
   void _appendOutput(String chunk) {
-    state = state.copyWith(output: state.output + chunk);
+    state = state.copyWith(
+      output: state.output + sanitizeTerminalOutput(chunk),
+    );
   }
 
   void _applyHistory(List<TerminalIOLine> lines) {
@@ -213,7 +216,11 @@ class TerminalsNotifier extends Notifier<TerminalsState> {
         continue;
       }
       try {
-        buffer.write(utf8.decode(base64Decode(line.data), allowMalformed: true));
+        buffer.write(
+          sanitizeTerminalOutput(
+            utf8.decode(base64Decode(line.data), allowMalformed: true),
+          ),
+        );
       } catch (_) {
         buffer.write(line.data);
       }

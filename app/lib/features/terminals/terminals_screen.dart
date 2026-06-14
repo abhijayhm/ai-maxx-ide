@@ -16,14 +16,11 @@ class TerminalsScreen extends ConsumerStatefulWidget {
 class _TerminalsScreenState extends ConsumerState<TerminalsScreen> {
   final _scrollController = ScrollController();
   final _inputController = TextEditingController();
-  String _lastInput = '';
-  int _lastCols = 80;
-  int _lastRows = 24;
+  final _inputFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    _inputController.addListener(_onInputChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(terminalsProvider.notifier).refresh();
     });
@@ -31,21 +28,10 @@ class _TerminalsScreenState extends ConsumerState<TerminalsScreen> {
 
   @override
   void dispose() {
-    _inputController.removeListener(_onInputChanged);
+    _inputFocus.dispose();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _onInputChanged() {
-    final text = _inputController.text;
-    final notifier = ref.read(terminalsProvider.notifier);
-    if (text.length > _lastInput.length) {
-      notifier.sendInput(text.substring(_lastInput.length));
-    } else if (text.length < _lastInput.length) {
-      notifier.sendBackspace();
-    }
-    _lastInput = text;
   }
 
   void _scrollToEnd() {
@@ -59,6 +45,22 @@ class _TerminalsScreenState extends ConsumerState<TerminalsScreen> {
         curve: Curves.easeOut,
       );
     });
+  }
+
+  void _submitCommand() {
+    final state = ref.read(terminalsProvider);
+    if (!state.attached) {
+      return;
+    }
+    final line = _inputController.text;
+    final notifier = ref.read(terminalsProvider.notifier);
+    if (line.isEmpty) {
+      notifier.sendInput('\n');
+    } else {
+      notifier.sendInput('$line\n');
+    }
+    _inputController.clear();
+    _inputFocus.requestFocus();
   }
 
   @override
@@ -94,47 +96,26 @@ class _TerminalsScreenState extends ConsumerState<TerminalsScreen> {
               ),
             ),
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final charWidth = 7.8;
-                final lineHeight = 18.0;
-                final cols =
-                    (constraints.maxWidth / charWidth).floor().clamp(20, 200);
-                final rows =
-                    (constraints.maxHeight / lineHeight).floor().clamp(8, 120);
-                if (state.attached &&
-                    (cols != _lastCols || rows != _lastRows)) {
-                  _lastCols = cols;
-                  _lastRows = rows;
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    ref
-                        .read(terminalsProvider.notifier)
-                        .resize(cols: cols, rows: rows);
-                  });
-                }
-
-                return ColoredBox(
-                  color: const Color(0xFF0F0F0F),
-                  child: SingleChildScrollView(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(12),
-                    child: SelectableText(
-                      state.output.isEmpty
-                          ? (state.loading
-                              ? 'Loading terminal…'
-                              : 'Terminal output will appear here…')
-                          : state.output,
-                      style: workbenchMonoStyle(
-                        context,
-                        size: 13,
-                        color: state.output.isEmpty
-                            ? colors.fgMuted
-                            : colors.fgDefault,
-                      ),
-                    ),
+            child: ColoredBox(
+              color: const Color(0xFF0F0F0F),
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(12),
+                child: SelectableText(
+                  state.output.isEmpty
+                      ? (state.loading
+                          ? 'Loading terminal…'
+                          : 'Terminal output will appear here…')
+                      : state.output,
+                  style: workbenchMonoStyle(
+                    context,
+                    size: 13,
+                    color: state.output.isEmpty
+                        ? colors.fgMuted
+                        : colors.fgDefault,
                   ),
-                );
-              },
+                ),
+              ),
             ),
           ),
           Container(
@@ -169,33 +150,50 @@ class _TerminalsScreenState extends ConsumerState<TerminalsScreen> {
           Container(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             color: colors.elevated,
-            child: TextField(
-              controller: _inputController,
-              enabled: state.attached,
-              style: workbenchMonoStyle(context, size: 13),
-              decoration: InputDecoration(
-                hintText: state.attached
-                    ? 'Type command (Enter sends newline)'
-                    : 'Connect a terminal to type…',
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                filled: true,
-                fillColor: colors.input,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: colors.borderDefault),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _inputController,
+                    focusNode: _inputFocus,
+                    enabled: state.attached,
+                    maxLines: 1,
+                    style: workbenchMonoStyle(context, size: 13),
+                    decoration: InputDecoration(
+                      hintText: state.attached
+                          ? 'Type a command, tap ✓ to send'
+                          : 'Connect a terminal to type…',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      filled: true,
+                      fillColor: colors.input,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(color: colors.borderDefault),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(color: colors.borderDefault),
+                      ),
+                    ),
+                    textInputAction: TextInputAction.none,
+                  ),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: colors.borderDefault),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: state.attached ? _submitCommand : null,
+                  icon: const Icon(Icons.check, size: 22),
+                  color: colors.accentPrimary,
+                  tooltip: 'Send command',
+                  style: IconButton.styleFrom(
+                    backgroundColor: colors.input,
+                    disabledBackgroundColor: colors.input,
+                  ),
                 ),
-              ),
-              onSubmitted: (_) {
-                ref.read(terminalsProvider.notifier).sendInput('\n');
-                _inputController.clear();
-                _lastInput = '';
-              },
+              ],
             ),
           ),
         ],

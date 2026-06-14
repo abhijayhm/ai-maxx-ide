@@ -124,6 +124,20 @@ class AgentEvent {
     }
   }
 
+  static AgentEvent? fromStoredMessage(
+    String sender,
+    Map<String, dynamic> payload,
+  ) {
+    if (sender == 'user') {
+      final text = payload['text'] as String? ?? '';
+      if (text.isEmpty) {
+        return null;
+      }
+      return AgentEvent(type: AgentEventType.stream, raw: const {}, text: text);
+    }
+    return fromFrame({'type': 'stream', 'message': payload});
+  }
+
   static String? _extractAssistantText(Map<String, dynamic> message) {
     final content = message['content'];
     if (content is! List) {

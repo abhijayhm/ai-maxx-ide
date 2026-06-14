@@ -54,9 +54,11 @@ def agent_models_view(request):
 @permission_classes([IsRegisteredDevice, RequiresWorkspace])
 def agent_messages_view(request):
     workspace = get_workspace_from_request(request)
-    qs = AgentMessage.objects.filter(workspace=workspace, device=request.user).order_by(
-        "-timestamp"
-    )
+    qs = AgentMessage.objects.filter(workspace=workspace, device=request.user)
+    session_id = request.query_params.get("session_id")
+    if session_id is not None:
+        qs = qs.filter(agent_session_id=int(session_id))
+    qs = qs.order_by("timestamp")
     limit = int(request.query_params.get("limit", 50))
     offset = int(request.query_params.get("offset", 0))
     messages = qs[offset : offset + limit]

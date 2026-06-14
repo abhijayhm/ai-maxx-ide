@@ -194,9 +194,12 @@ class _WinPtyWrapper:
 
     def read(self, size: int = 4096) -> bytes:
         try:
-            return self._proc.read(size).encode("utf-8", errors="replace")
+            data = self._proc.read(size)
         except EOFError:
             return b""
+        if isinstance(data, bytes):
+            return data
+        return str(data).encode("utf-8", errors="replace")
 
     def set_size(self, cols: int, rows: int) -> None:
         if hasattr(self._proc, "setwinsize"):

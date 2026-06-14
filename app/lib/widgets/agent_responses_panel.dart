@@ -47,6 +47,9 @@ class _AgentResponsesPanelState extends State<AgentResponsesPanel> {
   @override
   void didUpdateWidget(AgentResponsesPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.activeSessionId != oldWidget.activeSessionId && widget.expanded) {
+      _scrollToEnd();
+    }
     if (widget.messages.length != oldWidget.messages.length || widget.running) {
       if (widget.expanded) {
         _scrollToEnd();

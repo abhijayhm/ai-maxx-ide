@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../remote/remote_client.dart';
 import '../ws/ws_client.dart';
 import 'app_providers.dart';
+import 'global_loader_provider.dart';
 
 class RemoteState {
   const RemoteState({
@@ -13,6 +14,9 @@ class RemoteState {
     this.videoReady = false,
     this.stagedCount = 0,
     this.error,
+    this.pointerX = 0.5,
+    this.pointerY = 0.5,
+    this.trackpadSensitivity = 1.5,
   });
 
   final bool connecting;
@@ -20,6 +24,12 @@ class RemoteState {
   final bool videoReady;
   final int stagedCount;
   final String? error;
+  /// Last server-reported cursor (normalized). Cursor is drawn into the RTC stream.
+  final double pointerX;
+  final double pointerY;
+  final double trackpadSensitivity;
+
+  bool get isLoading => connecting || (connected && !videoReady);
 
   RemoteState copyWith({
     bool? connecting,
@@ -27,6 +37,9 @@ class RemoteState {
     bool? videoReady,
     int? stagedCount,
     String? error,
+    double? pointerX,
+    double? pointerY,
+    double? trackpadSensitivity,
     bool clearError = false,
   }) {
     return RemoteState(
@@ -35,6 +48,9 @@ class RemoteState {
       videoReady: videoReady ?? this.videoReady,
       stagedCount: stagedCount ?? this.stagedCount,
       error: clearError ? null : (error ?? this.error),
+      pointerX: pointerX ?? this.pointerX,
+      pointerY: pointerY ?? this.pointerY,
+      trackpadSensitivity: trackpadSensitivity ?? this.trackpadSensitivity,
     );
   }
 }
@@ -49,6 +65,7 @@ final remoteClientProvider = Provider<RemoteClient?>((ref) {
 
 class RemoteNotifier extends Notifier<RemoteState> {
   RemoteClient? _client;
+  LoaderHandle? _loader;
 
   RemoteClient? get client => _client;
 
@@ -72,17 +89,26 @@ class RemoteNotifier extends Notifier<RemoteState> {
     );
   }
 
+  void _releaseLoader() {
+    _loader?.release();
+    _loader = null;
+  }
+
   void _onClientState({
     bool? connected,
     bool? videoReady,
     String? error,
     bool clearError = false,
+    double? pointerX,
+    double? pointerY,
   }) {
     state = state.copyWith(
       connected: connected ?? state.connected,
       videoReady: videoReady ?? state.videoReady,
       error: clearError ? null : (error ?? state.error),
       stagedCount: _client?.stagedCount ?? state.stagedCount,
+      pointerX: pointerX ?? state.pointerX,
+      pointerY: pointerY ?? state.pointerY,
     );
   }
 
@@ -97,7 +123,11 @@ class RemoteNotifier extends Notifier<RemoteState> {
       return;
     }
 
+    _releaseLoader();
     state = state.copyWith(connecting: true, clearError: true);
+    _loader = ref
+        .read(globalLoaderProvider.notifier)
+        .acquire('Connecting remote desktop…');
     try {
       await _client?.disconnect();
       _client = RemoteClient(
@@ -117,33 +147,67 @@ class RemoteNotifier extends Notifier<RemoteState> {
         connected: false,
         error: error.toString(),
       );
+    } finally {
+      _releaseLoader();
     }
   }
 
   Future<void> disconnect() async {
+    _releaseLoader();
     await _client?.disconnect();
     _client = null;
     state = const RemoteState();
   }
 
+  void setTrackpadSensitivity(double value) {
+    state = state.copyWith(trackpadSensitivity: value.clamp(0.25, 4.0));
+  }
+
   void pointerMove(double x, double y) {
-    _client?.pointerMove(x: x, y: y);
+    _client?.pointerMove(
+      x: x.clamp(0.0, 1.0),
+      y: y.clamp(0.0, 1.0),
+    );
+  }
+
+  void pointerDelta(double dx, double dy) {
+    _client?.pointerDelta(dx: dx, dy: dy);
   }
 
   void click({String button = 'left'}) {
     _client?.click(button: button);
   }
 
-  void sendKey(String value, {Set<String> modifiers = const {}}) {
+  void commitKeys(List<String> stagedKeys, Set<String> modifiers) {
     final client = _client;
     if (client == null) {
       return;
     }
-    if (modifiers.isEmpty) {
-      client.sendKeyInput(value);
+
+    if (stagedKeys.isEmpty && modifiers.isEmpty) {
       return;
     }
-    client.sendKeyInput(value, modifiers: modifiers);
+
+    if (modifiers.isEmpty) {
+      for (final key in stagedKeys) {
+        client.sendKeyInput(key, dispatch: true);
+      }
+      return;
+    }
+
+    if (stagedKeys.isEmpty) {
+      client.sendKeyInput('', modifiers: modifiers, dispatch: true);
+      return;
+    }
+
+    for (var i = 0; i < stagedKeys.length - 1; i++) {
+      client.sendKeyInput(stagedKeys[i], modifiers: modifiers, dispatch: true);
+    }
+    client.sendKeyInput(
+      stagedKeys.last,
+      modifiers: modifiers,
+      dispatch: true,
+    );
   }
 
   void dispatchStaging() {

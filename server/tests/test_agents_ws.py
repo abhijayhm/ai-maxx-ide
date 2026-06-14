@@ -93,20 +93,38 @@ def test_agent_sessions_list_and_create(workspace_client, workspace, registered_
 
 
 @pytest.mark.django_db
-def test_agent_messages_http(workspace_client, workspace, registered_device):
+def test_agent_messages_http(workspace_client, workspace, registered_device, agent_session):
     from core.models import AgentMessage, Sender
 
     AgentMessage.objects.create(
         device=registered_device,
         workspace=workspace,
+        agent_session=agent_session,
         sender=Sender.USER,
         receiver=Sender.SYSTEM,
         run_id="r1",
         payload={"text": "hi"},
     )
+    AgentMessage.objects.create(
+        device=registered_device,
+        workspace=workspace,
+        sender=Sender.USER,
+        receiver=Sender.SYSTEM,
+        run_id="r2",
+        payload={"text": "other session"},
+    )
     resp = workspace_client.get("/api/agent/messages/")
     assert resp.status_code == 200
-    assert len(resp.json()) == 1
+    assert len(resp.json()) == 2
+
+    resp = workspace_client.get(
+        f"/api/agent/messages/?session_id={agent_session.id}"
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["payload"]["text"] == "hi"
+    assert body[0]["agent_session"] == agent_session.id
 
 
 @pytest.mark.django_db

@@ -79,8 +79,9 @@ const _textRows = [
   [
     _Key('123', value: '__mode_numbers__', role: _KeyRole.action, flex: 1.4),
     _Key(r'$#', value: '__mode_special__', role: _KeyRole.action, flex: 1.2),
-    _Key('', value: '__space__', role: _KeyRole.wide, flex: 4.0),
-    _Key('↵', value: '\n', role: _KeyRole.accent, flex: 1.4),
+    _Key('', value: '__space__', role: _KeyRole.wide, flex: 3.2),
+    _Key('↵', value: '\n', role: _KeyRole.action, flex: 1.0),
+    _Key('✓', value: '__commit__', role: _KeyRole.accent, flex: 1.2),
   ],
 ];
 
@@ -121,8 +122,9 @@ const _numRows = [
   [
     _Key('ABC', value: '__mode_text__', role: _KeyRole.action, flex: 1.4),
     _Key('Fn', value: '__mode_fn__', role: _KeyRole.action, flex: 1.2),
-    _Key('', value: '__space__', role: _KeyRole.wide, flex: 4.0),
-    _Key('↵', value: '\n', role: _KeyRole.accent, flex: 1.4),
+    _Key('', value: '__space__', role: _KeyRole.wide, flex: 3.2),
+    _Key('↵', value: '\n', role: _KeyRole.action, flex: 1.0),
+    _Key('✓', value: '__commit__', role: _KeyRole.accent, flex: 1.2),
   ],
 ];
 
@@ -163,14 +165,15 @@ const _specialRows = [
   [
     _Key('ABC', value: '__mode_text__', role: _KeyRole.action, flex: 1.4),
     _Key('Fn', value: '__mode_fn__', role: _KeyRole.action, flex: 1.2),
-    _Key('', value: '__space__', role: _KeyRole.wide, flex: 4.0),
-    _Key('↵', value: '\n', role: _KeyRole.accent, flex: 1.4),
+    _Key('', value: '__space__', role: _KeyRole.wide, flex: 3.2),
+    _Key('↵', value: '\n', role: _KeyRole.action, flex: 1.0),
+    _Key('✓', value: '__commit__', role: _KeyRole.accent, flex: 1.2),
   ],
 ];
 
 const _fnRows = [
   [
-    _Key('Esc', value: '\x1b', role: _KeyRole.action, flex: 1.3),
+    _Key('Esc', value: '\x1b', role: _KeyRole.action, flex: 1.1),
     _Key('F1', value: '\x1bOP'),
     _Key('F2', value: '\x1bOQ'),
     _Key('F3', value: '\x1bOR'),
@@ -185,31 +188,32 @@ const _fnRows = [
     _Key('F10', value: '\x1b[21~'),
     _Key('F11', value: '\x1b[23~'),
     _Key('F12', value: '\x1b[24~'),
-    _Key('Del', value: '\x1b[3~', role: _KeyRole.destructive),
     _Key('Ins', value: '\x1b[2~'),
     _Key('Home', value: '\x1b[H'),
-    _Key('End', value: '\x1b[F'),
     _Key('PgUp', value: '\x1b[5~'),
+    _Key('Del', value: '\x1b[3~', role: _KeyRole.destructive),
+    _Key('End', value: '\x1b[F'),
     _Key('PgDn', value: '\x1b[6~'),
     _Key('⌫', value: '__back__', role: _KeyRole.action),
   ],
   [
-    _Key('Tab', value: '\t', role: _KeyRole.action, flex: 1.4),
+    _Key('Tab', value: '\t', role: _KeyRole.action, flex: 1.3),
     _Key('Caps', value: '__caps__', role: _KeyRole.action, flex: 1.2),
-    _Key('⇧', value: '__shift__', role: _KeyRole.action, flex: 1.0),
-    _Key('Ctrl', value: '__ctrl__', role: _KeyRole.action, flex: 1.0),
-    _Key('Alt', value: '__alt__', role: _KeyRole.action, flex: 1.0),
-    _Key('Meta', value: '__meta__', role: _KeyRole.action, flex: 1.0),
+    _Key('', value: '__spacer__', role: _KeyRole.spacer, flex: 0.8),
+    _Key('←', value: '\x1b[D', role: _KeyRole.action),
     _Key('↑', value: '\x1b[A', role: _KeyRole.action),
     _Key('↓', value: '\x1b[B', role: _KeyRole.action),
-    _Key('←', value: '\x1b[D', role: _KeyRole.action),
     _Key('→', value: '\x1b[C', role: _KeyRole.action),
   ],
   [
-    _Key('ABC', value: '__mode_text__', role: _KeyRole.action, flex: 1.4),
-    _Key('123', value: '__mode_numbers__', role: _KeyRole.action, flex: 1.2),
-    _Key('', value: '__space__', role: _KeyRole.wide, flex: 4.0),
-    _Key('↵', value: '\n', role: _KeyRole.accent, flex: 1.4),
+    _Key('Ctrl', value: '__ctrl__', role: _KeyRole.action, flex: 1.1),
+    _Key('Win', value: '__win__', role: _KeyRole.action, flex: 1.0),
+    _Key('Alt', value: '__alt__', role: _KeyRole.action, flex: 1.0),
+    _Key('', value: '__space__', role: _KeyRole.wide, flex: 2.8),
+    _Key('Alt', value: '__alt__', role: _KeyRole.action, flex: 1.0),
+    _Key('Ctrl', value: '__ctrl__', role: _KeyRole.action, flex: 1.1),
+    _Key('↵', value: '\n', role: _KeyRole.action, flex: 0.9),
+    _Key('✓', value: '__commit__', role: _KeyRole.accent, flex: 1.0),
   ],
 ];
 
@@ -238,6 +242,32 @@ class RemoteKeyboardController extends ValueNotifier<RemoteKeyboardState> {
     value = value.copyWith(activeModifiers: next);
   }
 
+  void stageKey(String raw) {
+    value = value.copyWith(stagedKeys: [...value.stagedKeys, raw]);
+  }
+
+  void popStaged() {
+    if (value.stagedKeys.isEmpty) {
+      return;
+    }
+    final next = List<String>.from(value.stagedKeys)..removeLast();
+    value = value.copyWith(stagedKeys: next);
+  }
+
+  void clearStaged() {
+    value = value.copyWith(stagedKeys: const []);
+  }
+
+  void clearAll() {
+    value = RemoteKeyboardState(
+      mode: value.mode,
+      shift: false,
+      caps: false,
+      activeModifiers: const {},
+      stagedKeys: const [],
+    );
+  }
+
   String resolve(String raw) {
     var out = raw;
     if ((value.shift || value.caps) && raw.length == 1) {
@@ -257,6 +287,7 @@ class RemoteKeyboardState {
     this.caps = false,
     this.sticky = false,
     this.activeModifiers = const {},
+    this.stagedKeys = const [],
   });
 
   final KeyboardMode mode;
@@ -264,6 +295,7 @@ class RemoteKeyboardState {
   final bool caps;
   final bool sticky;
   final Set<String> activeModifiers;
+  final List<String> stagedKeys;
 
   RemoteKeyboardState copyWith({
     KeyboardMode? mode,
@@ -271,6 +303,7 @@ class RemoteKeyboardState {
     bool? caps,
     bool? sticky,
     Set<String>? activeModifiers,
+    List<String>? stagedKeys,
   }) =>
       RemoteKeyboardState(
         mode: mode ?? this.mode,
@@ -278,6 +311,7 @@ class RemoteKeyboardState {
         caps: caps ?? this.caps,
         sticky: sticky ?? this.sticky,
         activeModifiers: activeModifiers ?? this.activeModifiers,
+        stagedKeys: stagedKeys ?? this.stagedKeys,
       );
 }
 
@@ -285,12 +319,12 @@ class RemoteKeyboardState {
 class RemoteKeyboard extends StatefulWidget {
   const RemoteKeyboard({
     super.key,
-    required this.onKey,
+    required this.onCommit,
     this.controller,
     this.onModifiersChanged,
   });
 
-  final void Function(String value, Set<String> modifiers) onKey;
+  final void Function(List<String> stagedKeys, Set<String> modifiers) onCommit;
   final RemoteKeyboardController? controller;
   final VoidCallback? onModifiersChanged;
 
@@ -335,8 +369,14 @@ class _RemoteKeyboardState extends State<RemoteKeyboard> {
     }
   }
 
-  void _emit(String value) {
-    widget.onKey(value, Set<String>.from(_ctrl.value.activeModifiers));
+  void _commit() {
+    final staged = List<String>.from(_ctrl.value.stagedKeys);
+    final mods = Set<String>.from(_ctrl.value.activeModifiers);
+    if (staged.isEmpty && mods.isEmpty) {
+      return;
+    }
+    widget.onCommit(staged, mods);
+    _ctrl.clearAll();
   }
 
   void _handleKey(_Key key) {
@@ -367,34 +407,55 @@ class _RemoteKeyboardState extends State<RemoteKeyboard> {
         _ctrl.toggleModifier('alt');
         return;
       case '__meta__':
+      case '__win__':
         _ctrl.toggleModifier('meta');
         return;
+      case '__spacer__':
+        return;
       case '__back__':
-        _emit('\b');
+        _ctrl.popStaged();
+        return;
+      case '__commit__':
+        _commit();
         return;
       case '__space__':
-        _emit(' ');
+        _ctrl.stageKey(' ');
         return;
       default:
-        _emit(_ctrl.resolve(v));
+        _ctrl.stageKey(_ctrl.resolve(v));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final state = _ctrl.value;
+    final showStaged = state.activeModifiers.isNotEmpty ||
+        state.shift ||
+        state.caps ||
+        state.stagedKeys.isNotEmpty;
+
     return ColoredBox(
       color: _T.bgChrome,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _ModeStrip(mode: state.mode, onModeChanged: _ctrl.toggleMode),
-          const SizedBox(height: 4),
-          if (state.activeModifiers.isNotEmpty || state.shift || state.caps)
-            _ModifierBadges(state: state),
-          for (final row in _rows)
-            _KeyRow(keys: row, state: state, onKey: _handleKey),
-          const SizedBox(height: 4),
+          if (showStaged)
+            _StagedComboBar(state: state, onClear: _ctrl.clearAll),
+          Expanded(
+            child: Column(
+              children: [
+                for (final row in _rows)
+                  Expanded(
+                    child: _KeyRow(
+                      keys: row,
+                      state: state,
+                      onKey: _handleKey,
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -463,52 +524,96 @@ class _ModeStrip extends StatelessWidget {
   }
 }
 
-class _ModifierBadges extends StatelessWidget {
-  const _ModifierBadges({required this.state});
+class _StagedComboBar extends StatelessWidget {
+  const _StagedComboBar({required this.state, required this.onClear});
 
   final RemoteKeyboardState state;
+  final VoidCallback onClear;
+
+  String _labelForKey(String key) {
+    if (key == '\n') return '↵';
+    if (key == '\t') return 'Tab';
+    if (key == ' ') return 'Space';
+    if (key == '\b') return '⌫';
+    if (key.startsWith('\x1b')) return 'Fn';
+    if (key.length == 1) return key.toUpperCase();
+    return key;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final badges = <String>[];
-    if (state.caps) badges.add('CAPS');
-    if (state.shift) badges.add('⇧');
-    badges.addAll(state.activeModifiers.map((m) => m.toUpperCase()));
+    final parts = <String>[];
+    if (state.caps) parts.add('CAPS');
+    if (state.shift) parts.add('⇧');
+    parts.addAll(
+      state.activeModifiers.map(
+        (m) => m == 'meta' ? 'WIN' : m.toUpperCase(),
+      ),
+    );
+    parts.addAll(state.stagedKeys.map(_labelForKey));
 
     return ColoredBox(
       color: _T.bgCanvas,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Wrap(
-            spacing: 4,
-            children: badges
-                .map(
-                  (b) => DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: _T.accentPrim.withValues(alpha: 0.18),
-                      border: Border.all(color: _T.accentPrim),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: parts.isEmpty
+                  ? Text(
+                      'Tap keys, then ✓ to send',
+                      style: GoogleFonts.ubuntuMono(
+                        fontSize: 10,
+                        color: _T.fgInactive,
                       ),
-                      child: Text(
-                        b,
-                        style: GoogleFonts.ubuntuMono(
-                          fontSize: 10,
-                          color: _T.accentPrim,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                    )
+                  : Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: parts
+                          .map(
+                            (b) => DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: _T.accentPrim.withValues(alpha: 0.18),
+                                border: Border.all(color: _T.accentPrim),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2,
+                                ),
+                                child: Text(
+                                  b,
+                                  style: GoogleFonts.ubuntuMono(
+                                    fontSize: 10,
+                                    color: _T.accentPrim,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
                     ),
+            ),
+            if (parts.isNotEmpty)
+              TextButton(
+                onPressed: onClear,
+                style: TextButton.styleFrom(
+                  minimumSize: Size.zero,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'Clear',
+                  style: GoogleFonts.ubuntuMono(
+                    fontSize: 10,
+                    color: _T.fgMuted,
                   ),
-                )
-                .toList(),
-          ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -529,19 +634,22 @@ class _KeyRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 3, 4, 0),
+      padding: const EdgeInsets.fromLTRB(4, 2, 4, 2),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: keys
             .map(
               (k) => Expanded(
-                flex: (k.flex * 100).round(),
+                flex: (k.flex * 100).round().clamp(1, 400),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: _KeyCell(
-                    keyData: k,
-                    state: state,
-                    onTap: () => onKey(k),
-                  ),
+                  child: k.role == _KeyRole.spacer
+                      ? const SizedBox.shrink()
+                      : _KeyCell(
+                          keyData: k,
+                          state: state,
+                          onTap: () => onKey(k),
+                        ),
                 ),
               ),
             )
@@ -576,7 +684,10 @@ class _KeyCellState extends State<_KeyCell> {
     if (v == '__caps__') return s.caps;
     if (v == '__ctrl__') return s.activeModifiers.contains('ctrl');
     if (v == '__alt__') return s.activeModifiers.contains('alt');
-    if (v == '__meta__') return s.activeModifiers.contains('meta');
+    if (v == '__meta__' || v == '__win__') {
+      return s.activeModifiers.contains('meta');
+    }
+    if (v == '__commit__') return false;
     return false;
   }
 
@@ -613,6 +724,8 @@ class _KeyCellState extends State<_KeyCell> {
     final (bg, fg, border) = _colors;
     final k = widget.keyData;
     final isFn = widget.state.mode == KeyboardMode.fn;
+    final fontSize = isFn ? 9.5 : 12.0;
+    final letterSize = isFn ? 11.0 : 14.0;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -623,7 +736,6 @@ class _KeyCellState extends State<_KeyCell> {
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 80),
-        height: isFn ? 36 : 42,
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(5),
@@ -638,16 +750,18 @@ class _KeyCellState extends State<_KeyCell> {
                   ),
                 ],
         ),
+        alignment: Alignment.center,
         child: Stack(
+          fit: StackFit.expand,
           children: [
             if (k.sublabel != null)
               Positioned(
-                top: 3,
+                top: 2,
                 left: 4,
                 child: Text(
                   k.sublabel!,
                   style: GoogleFonts.ubuntuMono(
-                    fontSize: 8,
+                    fontSize: 7,
                     color: _T.fgInactive,
                   ),
                 ),
@@ -657,18 +771,19 @@ class _KeyCellState extends State<_KeyCell> {
                 _displayLabel,
                 style: k.role == _KeyRole.normal
                     ? GoogleFonts.ubuntu(
-                        fontSize: isFn ? 11 : 14,
+                        fontSize: letterSize,
                         color: fg,
                         fontWeight: FontWeight.w500,
                       )
                     : GoogleFonts.ubuntuMono(
-                        fontSize: isFn ? 10 : 12,
+                        fontSize: fontSize,
                         color: fg,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.3,
                       ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
               ),
             ),
           ],

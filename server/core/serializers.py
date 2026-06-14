@@ -46,6 +46,7 @@ class AgentMessageSerializer(serializers.ModelSerializer):
             "receiver",
             "run_id",
             "payload",
+            "agent_session",
         ]
 
 

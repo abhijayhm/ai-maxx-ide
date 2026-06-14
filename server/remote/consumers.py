@@ -16,6 +16,7 @@ class RemoteConsumer(AsyncWebsocketConsumer):
         await self.accept()
         if self.authenticated:
             await self.send_json({"type": "auth_ok", "connected": True})
+            await self._send_cursor_position()
 
     async def disconnect(self, close_code):
         await close_peer(self.pc, self._screen_track)
@@ -73,6 +74,14 @@ class RemoteConsumer(AsyncWebsocketConsumer):
         self.device = device
         self.authenticated = True
         await self.send_json({"type": "auth_ok", "connected": True})
+        await self._send_cursor_position()
+
+    async def _send_cursor_position(self) -> None:
+        from remote.cursor import normalize_position, read_cursor_position
+
+        abs_x, abs_y = read_cursor_position()
+        nx, ny = normalize_position(abs_x, abs_y)
+        await self.send_json({"type": "pointer_position", "x": nx, "y": ny})
 
     async def _handle_signaling(self, content):
         msg_type = content.get("type")
@@ -102,6 +111,17 @@ class RemoteConsumer(AsyncWebsocketConsumer):
                 "executed": executed if dispatch else [],
             }
         )
+        if dispatch:
+            for item in executed:
+                if item.get("normalized_x") is None:
+                    continue
+                await self.send_json(
+                    {
+                        "type": "pointer_position",
+                        "x": item["normalized_x"],
+                        "y": item["normalized_y"],
+                    }
+                )
 
     async def send_json(self, content):
         await self.send(text_data=json.dumps(content))
