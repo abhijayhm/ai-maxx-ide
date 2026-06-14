@@ -1,12 +1,20 @@
-"""Streaming VS Code-style search via ripgrep."""
+"""Streaming VS Code-style search via Aho-Corasick (pyahocorasick)."""
 
 from __future__ import annotations
 
-import json
-import re
-import subprocess
+import fnmatch
 from collections.abc import Iterator
 from pathlib import Path
+
+import ahocorasick
+
+_SKIP_DIR_NAMES = {".git", "__pycache__", "node_modules", ".dart_tool", "build", ".venv", "venv"}
+_MAX_FILE_BYTES = 2 * 1024 * 1024  # 2 MB per file
+_TEXT_SUFFIXES = {
+    ".py", ".dart", ".js", ".ts", ".tsx", ".jsx", ".json", ".md", ".txt", ".yaml", ".yml",
+    ".html", ".css", ".scss", ".sql", ".sh", ".bat", ".ps1", ".toml", ".ini", ".cfg",
+    ".xml", ".csv", ".rs", ".go", ".java", ".kt", ".c", ".cpp", ".h", ".hpp", ".cs",
+}
 
 
 def _asset_name(path: Path) -> str:
@@ -22,149 +30,133 @@ def _parse_include_exclude(
     return include, exclude
 
 
+def _build_automaton(keyword: str, *, match_case: bool) -> ahocorasick.Automaton:
+    """Build an Aho-Corasick automaton for a single search keyword."""
+    automaton = ahocorasick.Automaton()
+    needle = keyword if match_case else keyword.casefold()
+    automaton.add_word(needle, (needle, len(keyword)))
+    automaton.make_automaton()
+    return automaton
+
+
+def _line_matches(
+    line: str,
+    automaton: ahocorasick.Automaton,
+    *,
+    match_case: bool,
+) -> list[tuple[int, int]]:
+    """Return (start_index, end_index) pairs for substring matches on one line."""
+    haystack = line if match_case else line.casefold()
+    hits: list[tuple[int, int]] = []
+    for end_index, (_needle, orig_len) in automaton.iter(haystack):
+        start_index = end_index - orig_len + 1
+        hits.append((start_index, end_index + 1))
+    return hits
+
+
+def _path_matches_globs(
+    path: Path,
+    root: Path,
+    include: list[str],
+    exclude: list[str],
+) -> bool:
+    rel = path.relative_to(root).as_posix()
+    name = path.name
+    if include and not any(
+        fnmatch.fnmatch(rel, pattern) or fnmatch.fnmatch(name, pattern) for pattern in include
+    ):
+        return False
+    if exclude and any(
+        fnmatch.fnmatch(rel, pattern) or fnmatch.fnmatch(name, pattern) for pattern in exclude
+    ):
+        return False
+    return True
+
+
+def _looks_textual(path: Path) -> bool:
+    if path.suffix.lower() in _TEXT_SUFFIXES:
+        return True
+    return path.suffix == ""
+
+
+def _iter_search_files(
+    root: Path,
+    *,
+    include: list[str],
+    exclude: list[str],
+) -> Iterator[Path]:
+    stack = [root]
+    while stack:
+        current = stack.pop()
+        try:
+            entries = list(current.iterdir())
+        except (OSError, PermissionError):
+            continue
+        for entry in sorted(entries, key=lambda p: p.name.lower()):
+            if entry.is_symlink():
+                continue
+            if entry.is_dir():
+                if entry.name in _SKIP_DIR_NAMES:
+                    continue
+                stack.append(entry)
+                continue
+            if not entry.is_file():
+                continue
+            if not _path_matches_globs(entry, root, include, exclude):
+                continue
+            if not _looks_textual(entry):
+                continue
+            try:
+                if entry.stat().st_size > _MAX_FILE_BYTES:
+                    continue
+            except OSError:
+                continue
+            yield entry
+
+
 def stream_ide_search(
     root: Path,
     *,
     keyword: str,
     match_case: bool = False,
-    match_exact: bool = False,
+    match_exact: bool = False,  # noqa: ARG001 — reserved; AC search is always literal
     files_to_include: list | str | None = None,
     files_to_exclude: list | str | None = None,
 ) -> Iterator[dict]:
     """Yield per-file result objects as matches are found."""
-    if not keyword:
+    trimmed = keyword.strip()
+    if not trimmed:
         return
 
-    pattern = re.escape(keyword) if match_exact else keyword
     include, exclude = _parse_include_exclude(files_to_include, files_to_exclude)
+    automaton = _build_automaton(trimmed, match_case=match_case)
 
-    cmd = ["rg", "--json", "--line-number", pattern, str(root)]
-    if not match_case:
-        cmd.insert(1, "-i")
-    if match_exact:
-        cmd.insert(1, "-F")
-    for glob in include:
-        if glob:
-            cmd.extend(["--glob", glob])
-    for glob in exclude:
-        if glob:
-            cmd.extend(["--glob", f"!{glob}"])
-
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            bufsize=1,
-        )
-    except FileNotFoundError:
-        yield from _fallback_search(
-            root,
-            keyword=keyword,
-            match_case=match_case,
-            match_exact=match_exact,
-        )
-        return
-
-    grouped: dict[str, list[dict]] = {}
-    try:
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if obj.get("type") != "match":
-                continue
-            data = obj.get("data", {})
-            path_text = data.get("path", {}).get("text", "")
-            line_num = data.get("line_number", 0)
-            line_text = data.get("lines", {}).get("text", "").rstrip("\n")
-            submatches = data.get("submatches") or []
-            if submatches:
-                sm = submatches[0]
-                start_index = sm.get("start", 0)
-                end_index = sm.get("end", start_index + len(keyword))
-            else:
-                start_index = 0
-                end_index = len(keyword)
-
-            abs_path = Path(path_text)
-            try:
-                rel = abs_path.relative_to(root)
-                display_path = str(abs_path)
-            except ValueError:
-                display_path = path_text
-                rel = Path(path_text)
-
-            match_obj = {
-                "line": line_num,
-                "start_index": start_index,
-                "end_index": end_index,
-                "text": line_text,
-            }
-            key = display_path
-            if key not in grouped:
-                grouped[key] = []
-            grouped[key].append(match_obj)
-
-            yield {
-                "path": display_path,
-                "asset": _asset_name(abs_path if abs_path.is_absolute() else root / rel),
-                "matches": list(grouped[key]),
-            }
-    finally:
-        proc.wait(timeout=60)
-
-    if proc.returncode not in (0, 1) and not grouped:
-        yield from _fallback_search(
-            root,
-            keyword=keyword,
-            match_case=match_case,
-            match_exact=match_exact,
-        )
-
-
-def _fallback_search(
-    root: Path,
-    *,
-    keyword: str,
-    match_case: bool,
-    match_exact: bool,
-) -> Iterator[dict]:
-    flags = 0 if match_case else re.IGNORECASE
-    if match_exact:
-        regex = re.compile(re.escape(keyword), flags)
-    else:
-        regex = re.compile(keyword, flags)
-
-    for path in root.rglob("*"):
-        if not path.is_file() or path.is_symlink():
-            continue
+    for path in _iter_search_files(root, include=include, exclude=exclude):
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        matches = []
-        for i, line in enumerate(text.splitlines(), start=1):
-            m = regex.search(line)
-            if not m:
-                continue
-            matches.append(
-                {
-                    "line": i,
-                    "start_index": m.start(),
-                    "end_index": m.end(),
-                    "text": line,
-                }
-            )
-        if matches:
+
+        file_matches: list[dict] = []
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            for start_index, end_index in _line_matches(
+                line,
+                automaton,
+                match_case=match_case,
+            ):
+                file_matches.append(
+                    {
+                        "line": line_no,
+                        "start_index": start_index,
+                        "end_index": end_index,
+                        "text": line,
+                    }
+                )
+
+        if file_matches:
+            display_path = str(path)
             yield {
-                "path": str(path),
+                "path": display_path,
                 "asset": _asset_name(path),
-                "matches": matches,
+                "matches": file_matches,
             }
