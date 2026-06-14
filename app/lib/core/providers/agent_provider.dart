@@ -4,30 +4,45 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../agent/agent_client.dart';
 import '../config/app_config.dart';
+import 'agent_session_provider.dart';
+import 'composer_settings_provider.dart';
 import 'app_providers.dart';
 
 export '../agent/agent_client.dart' show AgentEvent, AgentEventType;
 
 class AgentState {
   const AgentState({
-    this.messages = const [],
+    this.messagesBySession = const {},
     this.running = false,
+    this.runningSessionId,
     this.error,
   });
 
-  final List<AgentEvent> messages;
+  final Map<int, List<AgentEvent>> messagesBySession;
   final bool running;
+  final int? runningSessionId;
   final String? error;
 
+  List<AgentEvent> messagesFor(int? sessionId) {
+    if (sessionId == null) {
+      return const [];
+    }
+    return messagesBySession[sessionId] ?? const [];
+  }
+
   AgentState copyWith({
-    List<AgentEvent>? messages,
+    Map<int, List<AgentEvent>>? messagesBySession,
     bool? running,
+    int? runningSessionId,
     String? error,
     bool clearError = false,
+    bool clearRunningSession = false,
   }) {
     return AgentState(
-      messages: messages ?? this.messages,
+      messagesBySession: messagesBySession ?? this.messagesBySession,
       running: running ?? this.running,
+      runningSessionId:
+          clearRunningSession ? null : (runningSessionId ?? this.runningSessionId),
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -52,25 +67,42 @@ class AgentNotifier extends Notifier<AgentState> {
       return;
     }
 
+    final sessionId = ref.read(agentSessionsProvider).activeId;
+    if (sessionId == null) {
+      await ref.read(agentSessionsProvider.notifier).ensureDefaultSession();
+      final retryId = ref.read(agentSessionsProvider).activeId;
+      if (retryId == null) {
+        return;
+      }
+      return send(text);
+    }
+
     await _ensureConnected();
+    final settings = ref.read(composerSettingsProvider);
+    final userEvent = AgentEvent(
+      type: AgentEventType.stream,
+      raw: const {},
+      text: trimmed,
+    );
+    final bucket = [...state.messagesFor(sessionId), userEvent];
     state = state.copyWith(
       running: true,
+      runningSessionId: sessionId,
       clearError: true,
-      messages: [
-        ...state.messages,
-        AgentEvent(type: AgentEventType.stream, raw: const {}, text: trimmed),
-      ],
+      messagesBySession: {...state.messagesBySession, sessionId: bucket},
     );
-    await _client!.sendMessage(trimmed);
-  }
-
-  Future<void> sendContextRef(String contextRef) async {
-    // Context refs are inserted into the composer by the UI — not sent directly.
+    await _client!.sendMessage(
+      trimmed,
+      sessionId: sessionId,
+      model: settings.effectiveModelId,
+      agentMode: settings.agentModeForSend,
+    );
   }
 
   Future<void> stop() async {
-    _client?.stop();
-    state = state.copyWith(running: false);
+    final sessionId = ref.read(agentSessionsProvider).activeId;
+    _client?.stop(sessionId: sessionId);
+    state = state.copyWith(running: false, clearRunningSession: true);
   }
 
   Future<void> _ensureConnected() async {
@@ -96,29 +128,39 @@ class AgentNotifier extends Notifier<AgentState> {
   }
 
   void _onEvent(AgentEvent event) {
+    final sessionId = ref.read(agentSessionsProvider).activeId;
+    if (sessionId == null) {
+      return;
+    }
+
     final text = event.text;
     if (text != null && text.isNotEmpty) {
+      final bucket = [...state.messagesFor(sessionId), event];
       state = state.copyWith(
-        messages: [...state.messages, event],
+        messagesBySession: {...state.messagesBySession, sessionId: bucket},
         running: _client?.isRunning ?? state.running,
+        runningSessionId: sessionId,
       );
       return;
     }
 
     if (event.type == AgentEventType.runStarted) {
-      state = state.copyWith(running: true);
+      state = state.copyWith(running: true, runningSessionId: sessionId);
       return;
     }
 
     if (event.type == AgentEventType.runFinished ||
         event.type == AgentEventType.stopped ||
         event.type == AgentEventType.error) {
+      final bucket = state.messagesFor(sessionId);
+      final nextBucket = text != null && text.isNotEmpty
+          ? [...bucket, event]
+          : bucket;
       state = state.copyWith(
         running: false,
+        clearRunningSession: true,
         error: event.type == AgentEventType.error ? text : null,
-        messages: text != null && text.isNotEmpty
-            ? [...state.messages, event]
-            : state.messages,
+        messagesBySession: {...state.messagesBySession, sessionId: nextBucket},
       );
     }
   }

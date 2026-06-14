@@ -7,6 +7,8 @@ import '../db/app_database.dart';
 import '../device_identifier.dart';
 import 'ide_index_provider.dart';
 import 'watchdog_provider.dart';
+import 'agent_session_provider.dart';
+import 'composer_settings_provider.dart';
 
 final appConfigProvider = Provider<AppConfig>((ref) => AppConfig());
 
@@ -137,6 +139,8 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
           background: true,
         );
     await ref.read(watchdogProvider.notifier).connect();
+    await ref.read(agentSessionsProvider.notifier).ensureDefaultSession();
+    await ref.read(composerSettingsProvider.notifier).loadModels();
   }
 
   void _kickoffIdeServices(SessionSnapshot snapshot) {
@@ -145,6 +149,8 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
     }
     Future.microtask(() async {
       await ref.read(watchdogProvider.notifier).connect();
+      await ref.read(agentSessionsProvider.notifier).ensureDefaultSession();
+      await ref.read(composerSettingsProvider.notifier).loadModels();
     });
   }
 }

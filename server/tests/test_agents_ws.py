@@ -2,11 +2,28 @@ import pytest
 from channels.testing.websocket import WebsocketCommunicator
 
 from config.asgi import application
+from core.models import AgentSession
+
+
+@pytest.fixture(autouse=True)
+def stub_cursor_agent(settings, monkeypatch):
+    settings.CURSOR_API_KEY = ""
+    monkeypatch.setattr("agents.cursor_bridge.RAISE_ERROR", False)
+
+
+@pytest.fixture
+def agent_session(db, workspace, registered_device):
+    return AgentSession.objects.create(
+        workspace=workspace,
+        device=registered_device,
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_agent_ws_auth_and_message(api_key, registered_device, workspace, device_hash):
+async def test_agent_ws_auth_and_message(
+    api_key, registered_device, workspace, device_hash, agent_session
+):
     url = (
         f"/api/ws/agent/?api_key={api_key}&device_hash={device_hash}&workspace_id={workspace.id}"
     )
@@ -14,7 +31,13 @@ async def test_agent_ws_auth_and_message(api_key, registered_device, workspace, 
     connected, _ = await communicator.connect()
     assert connected
 
-    await communicator.send_json_to({"type": "message", "text": "Hello agent"})
+    await communicator.send_json_to(
+        {
+            "type": "message",
+            "text": "Hello agent",
+            "session_id": agent_session.id,
+        }
+    )
     saw_stream = False
     for _ in range(10):
         response = await communicator.receive_json_from(timeout=5)
@@ -28,7 +51,9 @@ async def test_agent_ws_auth_and_message(api_key, registered_device, workspace, 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_agent_ws_auth_frame(api_key, registered_device, workspace, device_hash):
+async def test_agent_ws_auth_frame(
+    api_key, registered_device, workspace, device_hash, agent_session
+):
     communicator = WebsocketCommunicator(application, "/api/ws/agent/")
     connected, _ = await communicator.connect()
     assert connected
@@ -44,11 +69,27 @@ async def test_agent_ws_auth_frame(api_key, registered_device, workspace, device
     response = await communicator.receive_json_from(timeout=5)
     assert response["type"] == "auth_ok"
 
-    await communicator.send_json_to({"type": "message", "text": "test"})
+    await communicator.send_json_to(
+        {"type": "message", "text": "test", "session_id": agent_session.id}
+    )
     response = await communicator.receive_json_from(timeout=5)
     assert response.get("type") in ("stream", "run_started", "error")
 
     await communicator.disconnect()
+
+
+@pytest.mark.django_db
+def test_agent_sessions_list_and_create(workspace_client, workspace, registered_device):
+    resp = workspace_client.get("/api/agent/sessions/")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+    resp = workspace_client.post("/api/agent/sessions/")
+    assert resp.status_code == 201
+    body = resp.json()
+    assert "id" in body
+    assert "created_at" in body
+    assert AgentSession.objects.filter(workspace=workspace).count() == 1
 
 
 @pytest.mark.django_db
@@ -66,6 +107,16 @@ def test_agent_messages_http(workspace_client, workspace, registered_device):
     resp = workspace_client.get("/api/agent/messages/")
     assert resp.status_code == 200
     assert len(resp.json()) == 1
+
+
+@pytest.mark.django_db
+def test_agent_models(workspace_client):
+    resp = workspace_client.get("/api/agent/models/")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert isinstance(body, list)
+    assert len(body) >= 1
+    assert "id" in body[0]
 
 
 @pytest.mark.django_db

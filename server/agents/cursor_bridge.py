@@ -1,4 +1,4 @@
-"""Cursor SDK bridge — local agent per workspace with resumed conversation."""
+"""Cursor SDK bridge — session-scoped agents with in-memory reuse."""
 
 from __future__ import annotations
 
@@ -6,26 +6,29 @@ import os
 import traceback
 import uuid
 from dataclasses import asdict, is_dataclass
+from typing import Any
 
 from channels.db import database_sync_to_async
 from django.conf import settings
 
-from agents.bridge_launcher import close_bridge, get_bridge_async
+from agents.bridge_launcher import get_bridge_async
 
 # Temporary: set False in production to yield WS error frames instead of crashing.
 RAISE_ERROR = True
 
 _bridge_override = None
 _running: dict[int, dict] = {}
+_session_agents: dict[int, Any] = {}
+_workspace_clients: dict[str, Any] = {}
 
 
 def _debug(message: str) -> None:
     print(f"[agent.bridge] {message}", flush=True)
 
 
-def _debug_exception(exc: BaseException, workspace) -> None:
+def _debug_exception(exc: BaseException, workspace, session_id: int | None = None) -> None:
     _debug(
-        f"cursor SDK failed workspace_id={workspace.id} "
+        f"cursor SDK failed workspace_id={workspace.id} session_id={session_id} "
         f"type={type(exc).__name__} error={exc!r}"
     )
     for attr in ("code", "status", "request_id", "message"):
@@ -41,19 +44,19 @@ def set_bridge_override(fn):
 
 
 @database_sync_to_async
-def _persist_agent_id(workspace, agent_id: str) -> None:
-    if workspace.cursor_agent_id == agent_id:
+def _persist_session_agent_id(session, agent_id: str) -> None:
+    if session.cursor_agent_id == agent_id:
         return
-    workspace.cursor_agent_id = agent_id
-    workspace.save(update_fields=["cursor_agent_id", "updated_at"])
+    session.cursor_agent_id = agent_id
+    session.save(update_fields=["cursor_agent_id", "updated_at"])
 
 
 @database_sync_to_async
-def _clear_agent_id(workspace) -> None:
-    if not workspace.cursor_agent_id:
+def _clear_session_agent_id(session) -> None:
+    if not session.cursor_agent_id:
         return
-    workspace.cursor_agent_id = ""
-    workspace.save(update_fields=["cursor_agent_id", "updated_at"])
+    session.cursor_agent_id = ""
+    session.save(update_fields=["cursor_agent_id", "updated_at"])
 
 
 def _bridge_from_env():
@@ -71,21 +74,14 @@ def _bridge_from_env():
 
 
 def bind_cursor_agent(workspace) -> str | None:
-    """Return persisted Cursor agent id for workspace (created on first send)."""
+    """Legacy bind helper — sessions own agents now."""
     if _bridge_override:
         return _bridge_override(workspace)
 
     if not settings.CURSOR_API_KEY:
-        agent_id = workspace.cursor_agent_id or f"agent-stub-{workspace.id}"
-        _debug(f"bind stub workspace_id={workspace.id} agent_id={agent_id}")
-        return agent_id
+        return workspace.cursor_agent_id or f"agent-stub-{workspace.id}"
 
-    if workspace.cursor_agent_id:
-        _debug(f"bind existing workspace_id={workspace.id} agent_id={workspace.cursor_agent_id}")
-        return workspace.cursor_agent_id
-
-    _debug(f"bind deferred workspace_id={workspace.id} (agent created on first message)")
-    return None
+    return workspace.cursor_agent_id or None
 
 
 def _payload(message) -> dict:
@@ -97,7 +93,6 @@ def _payload(message) -> dict:
 
 
 def _extract_stream_text(payload: dict) -> str | None:
-    """Normalize Cursor SDK stream messages to displayable text."""
     msg_type = payload.get("type")
     if msg_type == "assistant":
         message = payload.get("message", {})
@@ -121,18 +116,51 @@ def _extract_stream_text(payload: dict) -> str | None:
     return text if text else None
 
 
-def _send_options(mode: str | None):
+def _normalize_agent_mode(agent_mode: str | None) -> str | None:
+    if agent_mode in ("agent", "plan"):
+        return agent_mode
+    return None
+
+
+def _send_options(model_id: str | None, agent_mode: str | None = None):
     from cursor_sdk.types import ModelSelection, SendOptions
 
-    model_id = mode or "composer-2.5"
-    return SendOptions(model=ModelSelection(id=model_id))
+    kwargs: dict = {"model": ModelSelection(id=model_id or "composer-2.5")}
+    normalized = _normalize_agent_mode(agent_mode)
+    if normalized is not None:
+        kwargs["mode"] = normalized
+    return SendOptions(**kwargs)
 
 
-async def _create_agent(client, workspace, mode: str | None):
+async def _get_client(workspace):
+    from cursor_sdk import AsyncClient
+
+    path = workspace.absolute_path
+    cached = _workspace_clients.get(path)
+    if cached is not None:
+        return cached
+
+    bridge_url, bridge_token = _bridge_from_env()
+    if bridge_url and bridge_token:
+        _debug(f"connect external bridge url={bridge_url}")
+        client = AsyncClient.connect(base_url=bridge_url, auth_token=bridge_token)
+    else:
+        bridge = await get_bridge_async(path)
+        _debug(f"using managed bridge workspace={path!r}")
+        client = AsyncClient(bridge.endpoint, allow_api_key_env_fallback=True)
+
+    _workspace_clients[path] = client
+    return client
+
+
+async def _create_agent(client, workspace, session, model_id: str | None):
     from cursor_sdk.types import LocalAgentOptions
 
-    model = mode or "composer-2.5"
-    _debug(f"send create workspace_id={workspace.id} model={model!r}")
+    model = model_id or "composer-2.5"
+    _debug(
+        f"send create workspace_id={workspace.id} session_id={session.id} "
+        f"model={model!r}"
+    )
     agent = await client.agents.create(
         model=model,
         api_key=settings.CURSOR_API_KEY,
@@ -141,107 +169,127 @@ async def _create_agent(client, workspace, mode: str | None):
             setting_sources=["project", "user"],
         ),
     )
-    _debug(f"create ok workspace_id={workspace.id} agent_id={agent.agent_id}")
-    await _persist_agent_id(workspace, agent.agent_id)
+    _debug(
+        f"create ok workspace_id={workspace.id} session_id={session.id} "
+        f"agent_id={agent.agent_id}"
+    )
+    await _persist_session_agent_id(session, agent.agent_id)
+    session.cursor_agent_id = agent.agent_id
+    _session_agents[session.id] = agent
     return agent
 
 
-async def _resume_agent(client, workspace):
+async def _resume_agent(client, workspace, session):
     from cursor_sdk.types import AgentOptions
 
     _debug(
-        f"send resume workspace_id={workspace.id} "
-        f"agent_id={workspace.cursor_agent_id}"
+        f"send resume workspace_id={workspace.id} session_id={session.id} "
+        f"agent_id={session.cursor_agent_id}"
     )
-    return await client.agents.resume(
-        workspace.cursor_agent_id,
+    agent = await client.agents.resume(
+        session.cursor_agent_id,
         AgentOptions(api_key=settings.CURSOR_API_KEY),
     )
+    _session_agents[session.id] = agent
+    return agent
 
 
-async def _resolve_agent(client, workspace, mode: str | None):
-    """Return (agent, resumed). Prefer _start_agent_run() at call sites."""
-    if workspace.cursor_agent_id:
+async def _resolve_session_agent(client, workspace, session, model_id: str | None):
+    cached = _session_agents.get(session.id)
+    if cached is not None:
+        _debug(f"reuse cached agent session_id={session.id}")
+        return cached, False
+
+    if session.cursor_agent_id:
         try:
-            agent = await _resume_agent(client, workspace)
-            _debug(f"resume ok workspace_id={workspace.id} agent_id={agent.agent_id}")
+            agent = await _resume_agent(client, workspace, session)
+            _debug(
+                f"resume ok workspace_id={workspace.id} session_id={session.id} "
+                f"agent_id={agent.agent_id}"
+            )
             return agent, True
         except Exception as exc:
             _debug(
-                f"resume failed workspace_id={workspace.id} "
-                f"agent_id={workspace.cursor_agent_id!r} error={exc!r}; creating fresh"
+                f"resume failed session_id={session.id} "
+                f"agent_id={session.cursor_agent_id!r} error={exc!r}; creating fresh"
             )
-            await _clear_agent_id(workspace)
-            workspace.cursor_agent_id = ""
+            await _clear_session_agent_id(session)
+            session.cursor_agent_id = ""
+            _session_agents.pop(session.id, None)
 
-    agent = await _create_agent(client, workspace, mode)
+    agent = await _create_agent(client, workspace, session, model_id)
     return agent, False
 
 
-async def _agent_send(agent, text: str, mode: str | None):
+async def _agent_send(agent, text: str, model_id: str | None, agent_mode: str | None):
     if isinstance(agent, tuple):
         agent = agent[0]
-    return await agent.send(text, _send_options(mode))
+    return await agent.send(text, _send_options(model_id, agent_mode))
 
 
-async def _start_agent_run(client, workspace, text: str, mode: str | None):
-    """Resolve or create agent, send prompt, recover from stale resume."""
-    resumed = False
-    agent = None
-
-    if workspace.cursor_agent_id:
-        try:
-            agent = await _resume_agent(client, workspace)
-            resumed = True
-            _debug(f"resume ok workspace_id={workspace.id} agent_id={agent.agent_id}")
-        except Exception as exc:
-            _debug(
-                f"resume failed workspace_id={workspace.id} "
-                f"agent_id={workspace.cursor_agent_id!r} error={exc!r}; creating fresh"
-            )
-            await _clear_agent_id(workspace)
-            workspace.cursor_agent_id = ""
-
-    if agent is None:
-        agent = await _create_agent(client, workspace, mode)
-        resumed = False
-
+async def _start_agent_run(
+    client, workspace, session, text: str, model_id: str | None, agent_mode: str | None
+):
+    agent, resumed = await _resolve_session_agent(client, workspace, session, model_id)
     try:
-        return await _agent_send(agent, text, mode)
+        return await _agent_send(agent, text, model_id, agent_mode)
     except Exception as exc:
-        if not resumed or not workspace.cursor_agent_id:
+        if not resumed or not session.cursor_agent_id:
             raise
         _debug(
-            f"send failed after resume workspace_id={workspace.id} "
-            f"agent_id={workspace.cursor_agent_id!r} error={exc!r}; recreating agent"
+            f"send failed after resume session_id={session.id} "
+            f"agent_id={session.cursor_agent_id!r} error={exc!r}; recreating agent"
         )
-        await _clear_agent_id(workspace)
-        workspace.cursor_agent_id = ""
-        fresh = await _create_agent(client, workspace, mode)
-        return await _agent_send(fresh, text, mode)
+        await _clear_session_agent_id(session)
+        session.cursor_agent_id = ""
+        _session_agents.pop(session.id, None)
+        fresh = await _create_agent(client, workspace, session, model_id)
+        return await _agent_send(fresh, text, model_id, agent_mode)
 
 
-async def _open_client(workspace):
-    from cursor_sdk import AsyncClient
+async def list_models(workspace):
+    """Return available Cursor models for the workspace account."""
+    if _bridge_override or not settings.CURSOR_API_KEY:
+        return [{"id": "composer-2.5", "display_name": "Composer 2.5"}]
 
-    bridge_url, bridge_token = _bridge_from_env()
-    if bridge_url and bridge_token:
-        _debug(f"connect external bridge url={bridge_url}")
-        return AsyncClient.connect(base_url=bridge_url, auth_token=bridge_token), None
+    from cursor_sdk import AsyncCursor
 
-    bridge = await get_bridge_async(workspace.absolute_path)
-    _debug(f"using managed bridge workspace={workspace.absolute_path!r}")
-    return (
-        AsyncClient(bridge.endpoint, allow_api_key_env_fallback=True),
-        bridge,
-    )
+    client = await _get_client(workspace)
+    models = await AsyncCursor.models.list(client=client)
+    result = []
+    for model in models:
+        model_id = getattr(model, "id", None) or str(model)
+        display = getattr(model, "display_name", None) or model_id
+        result.append({"id": model_id, "display_name": display})
+    return result
 
 
-async def send_message(workspace, text: str, mode: str | None = None):
-    """Send message to Cursor agent; yields stream events."""
+async def ensure_session_agent(workspace, session, model_id: str | None = None):
+    """Create or resume the Cursor agent for a session (called on session create)."""
+    if not settings.CURSOR_API_KEY or _bridge_override:
+        return None
+    if _session_agents.get(session.id) is not None:
+        return _session_agents[session.id]
+    client = await _get_client(workspace)
+    agent, _ = await _resolve_session_agent(client, workspace, session, model_id)
+    return agent
+
+
+async def send_message(
+    workspace,
+    session,
+    text: str,
+    *,
+    model: str | None = None,
+    agent_mode: str | None = None,
+    mode: str | None = None,
+):
+    """Send message to Cursor agent for a session; yields stream events."""
+    model_id = model or mode
     _debug(
-        f"send_message workspace_id={workspace.id} "
-        f"text_len={len(text)} mode={mode!r} agent_id={workspace.cursor_agent_id!r}"
+        f"send_message workspace_id={workspace.id} session_id={session.id} "
+        f"text_len={len(text)} model={model_id!r} agent_mode={agent_mode!r} "
+        f"agent_id={session.cursor_agent_id!r}"
     )
 
     if _bridge_override:
@@ -255,28 +303,29 @@ async def send_message(workspace, text: str, mode: str | None = None):
 
     if not settings.CURSOR_API_KEY:
         run_id = str(uuid.uuid4())
-        _running[workspace.id] = {"run_id": run_id, "running": True}
+        _running[session.id] = {"run_id": run_id, "running": True}
         yield {"type": "run_started", "run_id": run_id}
         yield {
             "type": "stream",
             "message": {"type": "assistant", "text": f"Stub: {text}"},
             "text": f"Stub: {text}",
         }
-        _running.pop(workspace.id, None)
+        _running.pop(session.id, None)
         yield {"type": "run_finished", "status": "completed"}
         return
 
-    client = None
     try:
-        client, _bridge = await _open_client(workspace)
-        _debug(f"client open workspace_id={workspace.id}")
+        client = await _get_client(workspace)
+        _debug(f"client open workspace_id={workspace.id} session_id={session.id}")
 
-        model_id = mode or "composer-2.5"
-        _debug(f"agent send workspace_id={workspace.id} model={model_id!r}")
-        run = await _start_agent_run(client, workspace, text, mode)
+        resolved_model = model_id or "composer-2.5"
+        _debug(f"agent send workspace_id={workspace.id} model={resolved_model!r}")
+        run = await _start_agent_run(
+            client, workspace, session, text, resolved_model, agent_mode
+        )
         run_id = getattr(run, "run_id", getattr(run, "id", str(uuid.uuid4())))
-        _debug(f"run started workspace_id={workspace.id} run_id={run_id}")
-        _running[workspace.id] = {"run_id": run_id, "run": run, "running": True}
+        _debug(f"run started session_id={session.id} run_id={run_id}")
+        _running[session.id] = {"run_id": run_id, "run": run, "running": True}
         yield {"type": "run_started", "run_id": run_id}
 
         async for message in run.messages():
@@ -285,7 +334,7 @@ async def send_message(workspace, text: str, mode: str | None = None):
             msg_type = payload.get("type", type(message).__name__)
             preview = (text_chunk or "")[:120]
             _debug(
-                f"stream workspace_id={workspace.id} run_id={run_id} "
+                f"stream session_id={session.id} run_id={run_id} "
                 f"type={msg_type!r} text_len={len(text_chunk or '')} "
                 f"preview={preview!r}"
             )
@@ -294,53 +343,50 @@ async def send_message(workspace, text: str, mode: str | None = None):
                 frame["text"] = text_chunk
             yield frame
 
-        _debug(f"run wait workspace_id={workspace.id} run_id={run_id}")
+        _debug(f"run wait session_id={session.id} run_id={run_id}")
         result = await run.wait()
-        _running.pop(workspace.id, None)
+        _running.pop(session.id, None)
         status = getattr(result, "status", None) or (
             result.get("status") if isinstance(result, dict) else "completed"
         )
-        _debug(f"run_finished workspace_id={workspace.id} run_id={run_id} status={status!r}")
+        _debug(f"run_finished session_id={session.id} run_id={run_id} status={status!r}")
         yield {
             "type": "run_finished",
             "status": status,
             "result": serialize_message(result),
         }
     except Exception as exc:
-        _debug_exception(exc, workspace)
-        _running.pop(workspace.id, None)
+        _debug_exception(exc, workspace, session.id)
+        _running.pop(session.id, None)
         if RAISE_ERROR:
             raise
         run_id = str(uuid.uuid4())
-        _running[workspace.id] = {"run_id": run_id, "running": True}
+        _running[session.id] = {"run_id": run_id, "running": True}
         yield {"type": "run_started", "run_id": run_id}
         yield {
             "type": "error",
             "code": "agent_error",
             "message": str(exc),
         }
-        _running.pop(workspace.id, None)
+        _running.pop(session.id, None)
         yield {"type": "run_finished", "status": "error"}
-    finally:
-        if client is not None:
-            await client.aclose()
 
 
-async def stop_run(workspace_id: int) -> bool:
-    state = _running.get(workspace_id)
+async def stop_run(session_id: int) -> bool:
+    state = _running.get(session_id)
     if not state:
-        _debug(f"stop_run workspace_id={workspace_id} — no active run")
+        _debug(f"stop_run session_id={session_id} — no active run")
         return False
     run = state.get("run")
     if run and hasattr(run, "cancel"):
         await run.cancel()
-    _running.pop(workspace_id, None)
-    _debug(f"stop_run workspace_id={workspace_id} cancelled")
+    _running.pop(session_id, None)
+    _debug(f"stop_run session_id={session_id} cancelled")
     return True
 
 
-def get_status(workspace_id: int) -> dict:
-    state = _running.get(workspace_id)
+def get_status(session_id: int) -> dict:
+    state = _running.get(session_id)
     if state:
         return {"running": True, "run_id": state.get("run_id", "")}
     return {"running": False, "run_id": ""}

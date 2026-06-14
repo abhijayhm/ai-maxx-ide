@@ -41,6 +41,13 @@ class AgentMessage(models.Model):
     receiver = models.CharField(max_length=16, choices=Sender.choices)
     device = models.ForeignKey(DeviceIdentifier, on_delete=models.CASCADE)
     workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE)
+    agent_session = models.ForeignKey(
+        "AgentSession",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="messages",
+    )
     run_id = models.CharField(max_length=64, blank=True)
     payload = models.JSONField()
 
@@ -49,3 +56,21 @@ class AgentMessage(models.Model):
 
     def __str__(self):
         return f"{self.sender}->{self.receiver} @ {self.timestamp}"
+
+
+class AgentSession(models.Model):
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="agent_sessions"
+    )
+    device = models.ForeignKey(
+        DeviceIdentifier, on_delete=models.CASCADE, related_name="agent_sessions"
+    )
+    cursor_agent_id = models.CharField(max_length=128, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"session {self.id} ws={self.workspace_id}"

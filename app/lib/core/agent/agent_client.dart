@@ -23,17 +23,27 @@ class AgentClient {
     await _ws.connect('agent/');
   }
 
-  Future<void> sendMessage(String text, {String? mode}) async {
+  Future<void> sendMessage(
+    String text, {
+    required int sessionId,
+    String? model,
+    String? agentMode,
+  }) async {
     _running = true;
     _ws.send({
       'type': 'message',
       'text': text,
-      if (mode != null) 'mode': mode,
+      'session_id': sessionId,
+      if (model != null) 'model': model,
+      if (agentMode != null) 'agent_mode': agentMode,
     });
   }
 
-  void stop() {
-    _ws.send({'type': 'stop'});
+  void stop({int? sessionId}) {
+    _ws.send({
+      'type': 'stop',
+      if (sessionId != null) 'session_id': sessionId,
+    });
     _running = false;
   }
 

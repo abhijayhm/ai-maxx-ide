@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 
 from core import views as core_views
 from ide import views as ide_views
@@ -22,4 +22,5 @@ urlpatterns = [
         ide_views.workspace_tree_view,
         name="workspace-tree",
     ),
+    path("", include("agents.urls")),
 ]

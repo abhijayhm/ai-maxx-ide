@@ -70,6 +70,7 @@ C:\flutter\bin\flutter pub get
 C:\flutter\bin\flutter devices
 
 # Hot-reload dev run (replace DEVICE_ID, e.g. 6000cc2e)
+flutter run -d 5e649a2c
 C:\flutter\bin\flutter run -d 6000cc2e
 
 # Install debug build without keeping terminal attached (build + install)

@@ -36,9 +36,14 @@ class WorkbenchScaffold extends ConsumerWidget {
             if (showShellChrome)
               _WorkbenchHeader(
                 onMenuTap: () => context.push('/menu/workspace'),
-                indexLabel: index.loading
-                    ? 'Indexing…'
-                    : '${index.searchable.length} files',
+                indexLabel: index.refreshing
+                    ? 'Syncing…'
+                    : index.loading
+                        ? 'Indexing…'
+                        : '${index.searchable.length} files',
+                onRefresh: isReady
+                    ? () => ref.read(ideIndexProvider.notifier).forceRefresh()
+                    : null,
               ),
             Expanded(child: child),
             if (showShellChrome)
@@ -79,10 +84,12 @@ class _WorkbenchHeader extends StatelessWidget {
   const _WorkbenchHeader({
     required this.onMenuTap,
     required this.indexLabel,
+    this.onRefresh,
   });
 
   final VoidCallback onMenuTap;
   final String indexLabel;
+  final VoidCallback? onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -116,6 +123,12 @@ class _WorkbenchHeader extends StatelessWidget {
             indexLabel,
             style: TextStyle(color: colors.fgMuted, fontSize: 11),
           ),
+          if (onRefresh != null)
+            IconButton(
+              onPressed: onRefresh,
+              icon: Icon(Icons.refresh, color: colors.fgMuted, size: 18),
+              tooltip: 'Refresh file tree',
+            ),
         ],
       ),
     );

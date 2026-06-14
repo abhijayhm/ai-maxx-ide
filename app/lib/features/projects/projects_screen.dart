@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/route_node.dart';
 import '../../core/providers/agent_provider.dart';
+import '../../core/providers/agent_session_provider.dart';
 import '../../core/providers/ide_file_provider.dart';
 import '../../core/providers/ide_index_provider.dart';
 import '../../core/providers/ide_search_provider.dart';
@@ -15,6 +16,7 @@ import '../../widgets/composer_card.dart';
 import '../../widgets/segmented_toggle.dart';
 import '../../widgets/workbench_search_field.dart';
 import '../../widgets/workspace_file_viewer.dart';
+import '../../widgets/workspace_tree_browser.dart';
 
 class ProjectsScreen extends ConsumerStatefulWidget {
   const ProjectsScreen({super.key});
@@ -30,7 +32,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   String _debouncedQuery = '';
   Timer? _debounce;
   int _searchMode = 0;
-  bool _agentForeground = false;
+  bool _agentExpanded = false;
 
   @override
   void dispose() {
@@ -64,8 +66,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
 
   void _insertContextRef(String contextRef) {
     final current = _composerController.text;
-    final prefix = current.trim().isEmpty ? '' : '$current ';
-    final next = '$prefix$contextRef';
+    final next = current.trim().isEmpty ? contextRef : '$current\n$contextRef';
     _composerController.value = TextEditingValue(
       text: next,
       selection: TextSelection.collapsed(offset: next.length),
@@ -77,16 +78,48 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     if (text.isEmpty) {
       return;
     }
-    setState(() => _agentForeground = true);
     ref.read(agentProvider.notifier).send(text);
     _composerController.clear();
   }
 
-  void _closeAgentForeground() {
-    setState(() => _agentForeground = false);
+  void _toggleAgentExpanded() {
+    setState(() => _agentExpanded = !_agentExpanded);
   }
 
   bool get _isSearching => _query.trim().isNotEmpty;
+
+  Widget _buildAgentPanel({
+    required AgentState agent,
+    required AgentSessionsState agentSessions,
+    required List<AgentEvent> activeMessages,
+    required int? activeSessionId,
+    required bool expanded,
+  }) {
+    return AgentResponsesPanel(
+      messages: activeMessages,
+      sessions: agentSessions.sessions,
+      activeSessionId: activeSessionId,
+      sessionsLoading: agentSessions.loading,
+      running: agent.running && agent.runningSessionId == activeSessionId,
+      expanded: expanded,
+      onToggleExpanded: _toggleAgentExpanded,
+      onSessionSelected: (id) =>
+          ref.read(agentSessionsProvider.notifier).selectSession(id),
+      onNewSession: () =>
+          ref.read(agentSessionsProvider.notifier).createSession(select: true),
+    );
+  }
+
+  Widget _buildComposer(AgentState agent) {
+    return ComposerCard(
+      controller: _composerController,
+      running: agent.running,
+      onSend: _sendComposer,
+      onStop: agent.running
+          ? () => ref.read(agentProvider.notifier).stop()
+          : null,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -94,11 +127,10 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     final index = ref.watch(ideIndexProvider);
     final grep = ref.watch(ideSearchProvider);
     final agent = ref.watch(agentProvider);
+    final agentSessions = ref.watch(agentSessionsProvider);
     final openFile = ref.watch(ideFileProvider);
-
-    if (_agentForeground) {
-      return _buildAgentForeground(colors, agent);
-    }
+    final activeSessionId = agentSessions.activeId;
+    final activeMessages = agent.messagesFor(activeSessionId);
 
     if (openFile.isOpen) {
       return ColoredBox(
@@ -107,20 +139,39 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: WorkspaceFileViewer(
-                file: openFile,
-                onClose: _closeFile,
-                onPickRange: _insertContextRef,
+              child: Stack(
+                children: [
+                  WorkspaceFileViewer(
+                    file: openFile,
+                    onClose: _closeFile,
+                    onPickRange: _insertContextRef,
+                  ),
+                  if (_agentExpanded)
+                    Positioned.fill(
+                      child: Material(
+                        color: colors.canvas,
+                        elevation: 2,
+                        child: _buildAgentPanel(
+                          agent: agent,
+                          agentSessions: agentSessions,
+                          activeMessages: activeMessages,
+                          activeSessionId: activeSessionId,
+                          expanded: true,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
-            ComposerCard(
-              controller: _composerController,
-              running: agent.running,
-              onSend: _sendComposer,
-              onStop: agent.running
-                  ? () => ref.read(agentProvider.notifier).stop()
-                  : null,
-            ),
+            if (!_agentExpanded)
+              _buildAgentPanel(
+                agent: agent,
+                agentSessions: agentSessions,
+                activeMessages: activeMessages,
+                activeSessionId: activeSessionId,
+                expanded: false,
+              ),
+            _buildComposer(agent),
           ],
         ),
       );
@@ -129,9 +180,6 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     final fileHits = _searchMode == 0
         ? searchByName(index.searchable, _debouncedQuery)
         : <RouteNode>[];
-
-    final resultsFlex = _isSearching ? 3 : 2;
-    final agentFlex = _isSearching ? 0 : 3;
 
     return ColoredBox(
       color: colors.canvas,
@@ -159,7 +207,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SegmentedToggle(
-                  options: const ['File search', 'grep'],
+                  options: const ['File Search', 'Find'],
                   selectedIndex: _searchMode,
                   onChanged: (index) => setState(() => _searchMode = index),
                 ),
@@ -188,110 +236,52 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
             ),
           const SizedBox(height: 8),
           Expanded(
-            flex: resultsFlex == 0 ? 1 : resultsFlex,
-            child: _isSearching
-                ? (_searchMode == 0
-                    ? _FileResultsList(
-                        files: fileHits,
-                        query: _query,
-                        onOpen: _openFile,
-                      )
-                    : _GrepResultsList(
-                        grep: grep,
-                        query: _query,
-                        onOpen: _openFile,
-                      ))
-                : Center(
-                    child: Text(
-                      index.loading
-                          ? 'Loading workspace index…'
-                          : 'Type to search indexed files by name.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: colors.fgMuted, fontSize: 13),
-                    ),
-                  ),
-          ),
-          if (agentFlex > 0)
-            Expanded(
-              flex: agentFlex,
-              child: Column(
-                children: [
-                  Expanded(
-                    child: AgentResponsesPanel(
-                      messages: agent.messages,
-                      running: agent.running,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ComposerCard(
-            controller: _composerController,
-            running: agent.running,
-            onSend: _sendComposer,
-            onStop: agent.running
-                ? () => ref.read(agentProvider.notifier).stop()
-                : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAgentForeground(WorkbenchColors colors, AgentState agent) {
-    return ColoredBox(
-      color: colors.canvas,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            height: 48,
-            color: colors.app,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(
+            child: Stack(
               children: [
-                IconButton(
-                  onPressed: _closeAgentForeground,
-                  icon: Icon(Icons.close, color: colors.fgMuted, size: 20),
-                  tooltip: 'Close',
-                ),
-                Text(
-                  'Agent',
-                  style: TextStyle(
-                    color: colors.fgStrong,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (agent.running) ...[
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: colors.accentPrimary,
+                _isSearching
+                    ? (_searchMode == 0
+                        ? _FileResultsList(
+                            files: fileHits,
+                            query: _query,
+                            onOpen: _openFile,
+                          )
+                        : _GrepResultsList(
+                            grep: grep,
+                            query: _query,
+                            onOpen: _openFile,
+                          ))
+                    : WorkspaceTreeBrowser(
+                        root: index.workspaceTree,
+                        loading: index.loading && index.workspaceTree == null,
+                        onPickPath: _insertContextRef,
+                        onOpenFile: _openFile,
+                      ),
+                if (_agentExpanded)
+                  Positioned.fill(
+                    child: Material(
+                      color: colors.canvas,
+                      elevation: 2,
+                      child: _buildAgentPanel(
+                        agent: agent,
+                        agentSessions: agentSessions,
+                        activeMessages: activeMessages,
+                        activeSessionId: activeSessionId,
+                        expanded: true,
+                      ),
                     ),
                   ),
-                ],
               ],
             ),
           ),
-          Divider(height: 1, color: colors.borderSubtle),
-          Expanded(
-            child: AgentResponsesPanel(
-              messages: agent.messages,
-              running: agent.running,
+          if (!_agentExpanded)
+            _buildAgentPanel(
+              agent: agent,
+              agentSessions: agentSessions,
+              activeMessages: activeMessages,
+              activeSessionId: activeSessionId,
+              expanded: false,
             ),
-          ),
-          ComposerCard(
-            controller: _composerController,
-            running: agent.running,
-            onSend: _sendComposer,
-            onStop: agent.running
-                ? () => ref.read(agentProvider.notifier).stop()
-                : null,
-          ),
+          _buildComposer(agent),
         ],
       ),
     );

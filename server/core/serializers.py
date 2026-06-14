@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from core.models import AgentMessage, DeviceIdentifier, Workspace
+from core.models import AgentMessage, AgentSession, DeviceIdentifier, Workspace
 
 
 class DeviceRegisterSerializer(serializers.Serializer):
@@ -47,3 +47,10 @@ class AgentMessageSerializer(serializers.ModelSerializer):
             "run_id",
             "payload",
         ]
+
+
+class AgentSessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AgentSession
+        fields = ["id", "created_at", "updated_at"]
+        read_only_fields = fields

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 
+import '../core/models/agent_session.dart';
 import '../core/providers/agent_provider.dart';
 import '../theme/workbench_colors.dart';
 import '../theme/workbench_theme.dart';
@@ -10,11 +11,25 @@ class AgentResponsesPanel extends StatefulWidget {
   const AgentResponsesPanel({
     super.key,
     required this.messages,
+    required this.sessions,
+    required this.activeSessionId,
+    required this.onSessionSelected,
+    required this.onNewSession,
+    this.sessionsLoading = false,
     this.running = false,
+    this.expanded = true,
+    this.onToggleExpanded,
   });
 
   final List<AgentEvent> messages;
+  final List<AgentSessionInfo> sessions;
+  final int? activeSessionId;
+  final ValueChanged<int> onSessionSelected;
+  final VoidCallback onNewSession;
+  final bool sessionsLoading;
   final bool running;
+  final bool expanded;
+  final VoidCallback? onToggleExpanded;
 
   @override
   State<AgentResponsesPanel> createState() => _AgentResponsesPanelState();
@@ -33,7 +48,9 @@ class _AgentResponsesPanelState extends State<AgentResponsesPanel> {
   void didUpdateWidget(AgentResponsesPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.messages.length != oldWidget.messages.length || widget.running) {
-      _scrollToEnd();
+      if (widget.expanded) {
+        _scrollToEnd();
+      }
     }
   }
 
@@ -50,11 +67,188 @@ class _AgentResponsesPanelState extends State<AgentResponsesPanel> {
     });
   }
 
+  AgentSessionInfo? get _activeSession {
+    final id = widget.activeSessionId;
+    if (id == null) {
+      return null;
+    }
+    for (final session in widget.sessions) {
+      if (session.id == id) {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _openSessionPicker() async {
+    final colors = context.workbenchColors;
+    final queryController = TextEditingController();
+    var filtered = widget.sessions;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: colors.elevated,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            void filter(String value) {
+              final q = value.trim().toLowerCase();
+              setModalState(() {
+                filtered = q.isEmpty
+                    ? widget.sessions
+                    : widget.sessions
+                        .where((s) => s.label.toLowerCase().contains(q))
+                        .toList();
+              });
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                    child: TextField(
+                      controller: queryController,
+                      autofocus: true,
+                      style: TextStyle(color: colors.fgDefault, fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: 'Search sessions',
+                        hintStyle: TextStyle(color: colors.fgPlaceholder),
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                      onChanged: filter,
+                    ),
+                  ),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(ctx).size.height * 0.45,
+                    ),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: filtered.length,
+                      itemBuilder: (ctx, i) {
+                        final session = filtered[i];
+                        final selected = session.id == widget.activeSessionId;
+                        return ListTile(
+                          dense: true,
+                          selected: selected,
+                          title: Text(
+                            session.label,
+                            style: workbenchMonoStyle(ctx, size: 13),
+                          ),
+                          subtitle: Text(
+                            'Session #${session.id}',
+                            style: TextStyle(
+                              color: colors.fgMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                          onTap: () {
+                            widget.onSessionSelected(session.id);
+                            Navigator.pop(ctx);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    queryController.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.workbenchColors;
     final items = _groupMessages(widget.messages);
+    final activeLabel = _activeSession?.label ?? 'Select session';
 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
+          child: Row(
+            children: [
+              if (widget.onToggleExpanded != null)
+                IconButton(
+                  onPressed: widget.onToggleExpanded,
+                  icon: Icon(
+                    widget.expanded
+                        ? Icons.expand_more
+                        : Icons.expand_less,
+                    color: colors.fgMuted,
+                    size: 20,
+                  ),
+                  tooltip: widget.expanded ? 'Collapse agent' : 'Expand agent',
+                ),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed:
+                      widget.sessions.isEmpty ? null : _openSessionPicker,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    side: BorderSide(color: colors.borderSubtle),
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      widget.sessionsLoading
+                          ? 'Loading sessions…'
+                          : activeLabel,
+                      style: workbenchMonoStyle(context, size: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+              if (widget.running) ...[
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colors.accentPrimary,
+                  ),
+                ),
+              ],
+              IconButton(
+                onPressed: widget.onNewSession,
+                icon: Icon(Icons.add, color: colors.accentPrimary, size: 20),
+                tooltip: 'New session',
+              ),
+            ],
+          ),
+        ),
+        if (widget.expanded)
+          Expanded(
+            child: _buildMessageList(context, colors, items),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildMessageList(
+    BuildContext context,
+    WorkbenchColors colors,
+    List<_DisplayMessage> items,
+  ) {
     if (items.isEmpty && !widget.running) {
       return Center(
         child: Text(
@@ -73,7 +267,7 @@ class _AgentResponsesPanelState extends State<AgentResponsesPanel> {
 
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       itemCount: items.length + (widget.running ? 1 : 0),
       itemBuilder: (context, index) {
         if (widget.running && index == items.length) {
@@ -108,11 +302,7 @@ class _AgentResponsesPanelState extends State<AgentResponsesPanel> {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: item.isUser
-                ? colors.aiCommandBg
-                : item.isError
-                    ? colors.elevated
-                    : colors.elevated,
+            color: item.isUser ? colors.aiCommandBg : colors.elevated,
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
               color: item.isError ? colors.statusError : colors.borderSubtle,

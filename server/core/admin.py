@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from core.models import AgentMessage, DeviceIdentifier, Workspace
+from core.models import AgentMessage, AgentSession, DeviceIdentifier, Workspace
 
 
 @admin.register(DeviceIdentifier)
@@ -22,3 +22,9 @@ class AgentMessageAdmin(admin.ModelAdmin):
     list_display = ("timestamp", "sender", "receiver", "device", "workspace", "run_id")
     list_filter = ("sender", "receiver")
     search_fields = ("run_id",)
+
+
+@admin.register(AgentSession)
+class AgentSessionAdmin(admin.ModelAdmin):
+    list_display = ("id", "workspace", "device", "cursor_agent_id", "created_at")
+    search_fields = ("cursor_agent_id",)

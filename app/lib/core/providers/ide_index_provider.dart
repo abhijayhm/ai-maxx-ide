@@ -14,6 +14,7 @@ class IdeIndexState {
   const IdeIndexState({
     this.exposedTree = const [],
     this.exposedFlat = const [],
+    this.workspaceTree,
     this.workspaceFlat = const [],
     this.loading = false,
     this.refreshing = false,
@@ -23,6 +24,7 @@ class IdeIndexState {
 
   final List<RouteNode> exposedTree;
   final List<RouteNode> exposedFlat;
+  final RouteNode? workspaceTree;
   final List<RouteNode> workspaceFlat;
   final bool loading;
   final bool refreshing;
@@ -37,16 +39,20 @@ class IdeIndexState {
   IdeIndexState copyWith({
     List<RouteNode>? exposedTree,
     List<RouteNode>? exposedFlat,
+    RouteNode? workspaceTree,
     List<RouteNode>? workspaceFlat,
     bool? loading,
     bool? refreshing,
     bool? loadedFromCache,
     String? error,
     bool clearError = false,
+    bool clearWorkspaceTree = false,
   }) {
     return IdeIndexState(
       exposedTree: exposedTree ?? this.exposedTree,
       exposedFlat: exposedFlat ?? this.exposedFlat,
+      workspaceTree:
+          clearWorkspaceTree ? null : (workspaceTree ?? this.workspaceTree),
       workspaceFlat: workspaceFlat ?? this.workspaceFlat,
       loading: loading ?? this.loading,
       refreshing: refreshing ?? this.refreshing,
@@ -99,6 +105,9 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
         state = state.copyWith(
           exposedTree: exposed?.tree ?? state.exposedTree,
           exposedFlat: exposed?.flat ?? state.exposedFlat,
+          workspaceTree: workspace?.tree.isNotEmpty == true
+              ? workspace!.tree.first
+              : state.workspaceTree,
           workspaceFlat: workspace?.flat ?? state.workspaceFlat,
           loading: false,
           loadedFromCache: true,
@@ -117,6 +126,11 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
     } else if (session?.isAuthenticated ?? false) {
       await refreshExposed(background: state.hasData);
     }
+  }
+
+  Future<void> forceRefresh() async {
+    _refreshInFlight = false;
+    await refreshAll(background: state.hasData);
   }
 
   Future<void> refreshAll({bool background = false}) async {
@@ -177,6 +191,7 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
       final tree = await repo.fetchWorkspaceTree(workspaceId);
       final flat = flattenRouteTree([tree]);
       state = state.copyWith(
+        workspaceTree: tree,
         workspaceFlat: flat,
         loading: false,
         refreshing: false,
