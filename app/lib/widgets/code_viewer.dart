@@ -237,6 +237,19 @@ class _CodeViewerState extends State<CodeViewer> {
     _clearSelection();
   }
 
+  void _selectAll() {
+    if (_lines.isEmpty) {
+      return;
+    }
+    _preserveScroll(() {
+      setState(() {
+        _selStart = 1;
+        _selEnd = _lines.length;
+      });
+    });
+    HapticFeedback.selectionClick();
+  }
+
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
@@ -254,6 +267,9 @@ class _CodeViewerState extends State<CodeViewer> {
               onClear: _clearSelection,
               onBack: widget.onBack,
               onEnterEdit: widget.onEnterEdit,
+              onSelectAll: _lines.isNotEmpty && widget.onSelection != null
+                  ? _selectAll
+                  : null,
             ),
             Visibility(
               visible: !_hasSelection,
@@ -405,6 +421,7 @@ class _Header extends StatelessWidget {
     required this.onClear,
     this.onBack,
     this.onEnterEdit,
+    this.onSelectAll,
   });
 
   final String fileName;
@@ -415,6 +432,7 @@ class _Header extends StatelessWidget {
   final VoidCallback onClear;
   final VoidCallback? onBack;
   final VoidCallback? onEnterEdit;
+  final VoidCallback? onSelectAll;
 
   @override
   Widget build(BuildContext context) {
@@ -460,12 +478,20 @@ class _Header extends StatelessWidget {
               tooltip: 'Add to composer',
               color: _C.accentPrimary,
             )
-          else if (!hasSelection && onEnterEdit != null)
-            _IconBtn(
-              icon: Icons.edit_outlined,
-              onTap: onEnterEdit!,
-              tooltip: 'Edit mode',
-            ),
+          else if (!hasSelection) ...[
+            if (onSelectAll != null)
+              _IconBtn(
+                icon: Icons.select_all,
+                onTap: onSelectAll!,
+                tooltip: 'Select all lines',
+              ),
+            if (onEnterEdit != null)
+              _IconBtn(
+                icon: Icons.edit_outlined,
+                onTap: onEnterEdit!,
+                tooltip: 'Edit mode',
+              ),
+          ],
         ],
       ),
     );
