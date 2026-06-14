@@ -369,6 +369,9 @@ List<_DisplayMessage> _groupMessages(List<AgentEvent> messages) {
       if (text.isEmpty) {
         continue;
       }
+      if (!_isAssistantStream(event)) {
+        continue;
+      }
       if (items.isNotEmpty && items.last.isAgent) {
         final last = items.removeLast();
         items.add(_DisplayMessage(text: last.text + text, isUser: false));
@@ -384,4 +387,15 @@ List<_DisplayMessage> _groupMessages(List<AgentEvent> messages) {
   }
 
   return items;
+}
+
+bool _isAssistantStream(AgentEvent event) {
+  if (event.raw.isEmpty) {
+    return true;
+  }
+  final message = event.raw['message'];
+  if (message is! Map<String, dynamic>) {
+    return false;
+  }
+  return message['type'] == 'assistant';
 }

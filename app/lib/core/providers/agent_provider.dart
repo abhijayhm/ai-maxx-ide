@@ -94,7 +94,7 @@ class AgentNotifier extends Notifier<AgentState> {
     await _client!.sendMessage(
       trimmed,
       sessionId: sessionId,
-      model: settings.effectiveModelId,
+      model: settings.modelForSend,
       agentMode: settings.agentModeForSend,
     );
   }
@@ -133,6 +133,44 @@ class AgentNotifier extends Notifier<AgentState> {
       return;
     }
 
+    if (event.type == AgentEventType.runStarted) {
+      state = state.copyWith(running: true, runningSessionId: sessionId);
+      return;
+    }
+
+    if (event.type == AgentEventType.runFinished ||
+        event.type == AgentEventType.stopped) {
+      state = state.copyWith(
+        running: false,
+        clearRunningSession: true,
+      );
+      return;
+    }
+
+    if (event.type == AgentEventType.error) {
+      final text = event.text;
+      if (text != null && text.isNotEmpty) {
+        final bucket = [...state.messagesFor(sessionId), event];
+        state = state.copyWith(
+          running: false,
+          clearRunningSession: true,
+          error: text,
+          messagesBySession: {...state.messagesBySession, sessionId: bucket},
+        );
+      } else {
+        state = state.copyWith(running: false, clearRunningSession: true);
+      }
+      return;
+    }
+
+    if (!_shouldDisplayStream(event)) {
+      state = state.copyWith(
+        running: _client?.isRunning ?? state.running,
+        runningSessionId: sessionId,
+      );
+      return;
+    }
+
     final text = event.text;
     if (text != null && text.isNotEmpty) {
       final bucket = [...state.messagesFor(sessionId), event];
@@ -141,28 +179,21 @@ class AgentNotifier extends Notifier<AgentState> {
         running: _client?.isRunning ?? state.running,
         runningSessionId: sessionId,
       );
-      return;
     }
+  }
 
-    if (event.type == AgentEventType.runStarted) {
-      state = state.copyWith(running: true, runningSessionId: sessionId);
-      return;
+  bool _shouldDisplayStream(AgentEvent event) {
+    if (event.type != AgentEventType.stream) {
+      return false;
     }
-
-    if (event.type == AgentEventType.runFinished ||
-        event.type == AgentEventType.stopped ||
-        event.type == AgentEventType.error) {
-      final bucket = state.messagesFor(sessionId);
-      final nextBucket = text != null && text.isNotEmpty
-          ? [...bucket, event]
-          : bucket;
-      state = state.copyWith(
-        running: false,
-        clearRunningSession: true,
-        error: event.type == AgentEventType.error ? text : null,
-        messagesBySession: {...state.messagesBySession, sessionId: nextBucket},
-      );
+    if (event.raw.isEmpty) {
+      return true;
     }
+    final message = event.raw['message'];
+    if (message is! Map<String, dynamic>) {
+      return false;
+    }
+    return message['type'] == 'assistant';
   }
 
   Future<void> _disconnect() async {

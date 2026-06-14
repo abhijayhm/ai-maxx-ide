@@ -77,19 +77,6 @@ class ComposerCard extends ConsumerWidget {
                       : colors.fgMuted,
                 ),
               ),
-              const SizedBox(width: 4),
-              _ModeButton(
-                selected: settings.mode == ComposerAgentMode.ask,
-                tooltip: 'Ask',
-                onTap: () => settingsNotifier.setMode(ComposerAgentMode.ask),
-                child: Icon(
-                  Icons.chat_bubble_outline,
-                  size: 16,
-                  color: settings.mode == ComposerAgentMode.ask
-                      ? Colors.green.shade400
-                      : colors.fgMuted,
-                ),
-              ),
               const SizedBox(width: 8),
               _ModelPicker(
                 settings: settings,
@@ -164,46 +151,57 @@ class _ModelPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.workbenchColors;
-    final models = settings.models;
-    final label = settings.modelsLoading
-        ? 'Loading…'
-        : (models
-                .where((m) => m.id == settings.effectiveModelId)
-                .map((m) => m.displayName)
-                .firstOrNull ??
-            settings.effectiveModelId);
+    final label = settings.modelsLoading ? 'Loading…' : settings.displayModelLabel;
 
     return PopupMenuButton<String>(
       tooltip: 'Model',
       onSelected: onSelected,
       itemBuilder: (context) {
-        if (models.isEmpty) {
-          return [
-            PopupMenuItem(
-              enabled: false,
-              child: Text(
-                settings.modelsLoading ? 'Loading models…' : 'No models',
-                style: TextStyle(color: colors.fgMuted, fontSize: 12),
+        final items = <PopupMenuEntry<String>>[
+          PopupMenuItem<String>(
+            value: kAutoModelId,
+            child: Text(
+              'Auto',
+              style: TextStyle(
+                color: settings.selectedModelId == kAutoModelId
+                    ? colors.accentPrimary
+                    : colors.fgDefault,
+                fontSize: 12,
               ),
             ),
-          ];
-        }
-        return models
-            .map(
-              (model) => PopupMenuItem<String>(
-                value: model.id,
+          ),
+        ];
+        if (settings.models.isEmpty) {
+          if (!settings.modelsLoading) {
+            items.add(
+              PopupMenuItem(
+                enabled: false,
                 child: Text(
-                  model.displayName,
-                  style: TextStyle(
-                    color: model.id == settings.effectiveModelId
-                        ? colors.accentPrimary
-                        : colors.fgDefault,
-                    fontSize: 12,
-                  ),
+                  'No models',
+                  style: TextStyle(color: colors.fgMuted, fontSize: 12),
                 ),
               ),
-            )
-            .toList();
+            );
+          }
+          return items;
+        }
+        items.addAll(
+          settings.models.map(
+            (model) => PopupMenuItem<String>(
+              value: model.id,
+              child: Text(
+                model.displayName,
+                style: TextStyle(
+                  color: model.id == settings.selectedModelId
+                      ? colors.accentPrimary
+                      : colors.fgDefault,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+        );
+        return items;
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

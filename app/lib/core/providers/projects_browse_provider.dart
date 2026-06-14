@@ -1,0 +1,46 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+/// In-memory projects tab browse state (search + tree) survives file open/close.
+class ProjectsBrowseState {
+  const ProjectsBrowseState({
+    this.query = '',
+    this.searchMode = 0,
+  });
+
+  final String query;
+  final int searchMode;
+
+  bool get isSearching => query.trim().isNotEmpty;
+
+  ProjectsBrowseState copyWith({
+    String? query,
+    int? searchMode,
+  }) {
+    return ProjectsBrowseState(
+      query: query ?? this.query,
+      searchMode: searchMode ?? this.searchMode,
+    );
+  }
+}
+
+final projectsBrowseProvider =
+    NotifierProvider<ProjectsBrowseNotifier, ProjectsBrowseState>(
+  ProjectsBrowseNotifier.new,
+);
+
+class ProjectsBrowseNotifier extends Notifier<ProjectsBrowseState> {
+  @override
+  ProjectsBrowseState build() => const ProjectsBrowseState();
+
+  void setQuery(String query) {
+    state = state.copyWith(query: query);
+  }
+
+  void setSearchMode(int mode) {
+    state = state.copyWith(searchMode: mode);
+  }
+
+  void clearQuery() {
+    state = state.copyWith(query: '');
+  }
+}

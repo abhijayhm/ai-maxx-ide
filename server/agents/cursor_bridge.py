@@ -122,10 +122,19 @@ def _normalize_agent_mode(agent_mode: str | None) -> str | None:
     return None
 
 
+def _resolve_model_id(model_id: str | None) -> str | None:
+    if not model_id or model_id == "auto":
+        return None
+    return model_id
+
+
 def _send_options(model_id: str | None, agent_mode: str | None = None):
     from cursor_sdk.types import ModelSelection, SendOptions
 
-    kwargs: dict = {"model": ModelSelection(id=model_id or "composer-2.5")}
+    kwargs: dict = {}
+    resolved = _resolve_model_id(model_id)
+    if resolved:
+        kwargs["model"] = ModelSelection(id=resolved)
     normalized = _normalize_agent_mode(agent_mode)
     if normalized is not None:
         kwargs["mode"] = normalized
@@ -156,7 +165,7 @@ async def _get_client(workspace):
 async def _create_agent(client, workspace, session, model_id: str | None):
     from cursor_sdk.types import LocalAgentOptions
 
-    model = model_id or "composer-2.5"
+    model = _resolve_model_id(model_id) or "composer-2.5"
     _debug(
         f"send create workspace_id={workspace.id} session_id={session.id} "
         f"model={model!r}"
@@ -318,8 +327,11 @@ async def send_message(
         client = await _get_client(workspace)
         _debug(f"client open workspace_id={workspace.id} session_id={session.id}")
 
-        resolved_model = model_id or "composer-2.5"
-        _debug(f"agent send workspace_id={workspace.id} model={resolved_model!r}")
+        resolved_model = _resolve_model_id(model_id)
+        _debug(
+            f"agent send workspace_id={workspace.id} "
+            f"model={resolved_model!r} agent_mode={agent_mode!r}"
+        )
         run = await _start_agent_run(
             client, workspace, session, text, resolved_model, agent_mode
         )

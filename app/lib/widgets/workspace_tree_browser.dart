@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/models/route_node.dart';
+import '../core/providers/workspace_tree_explorer_provider.dart';
 import '../theme/workbench_colors.dart';
 import '../theme/workbench_theme.dart';
 
 /// Workspace file/folder tree with long-press path selection for agent context.
-class WorkspaceTreeBrowser extends StatefulWidget {
+class WorkspaceTreeBrowser extends ConsumerStatefulWidget {
   const WorkspaceTreeBrowser({
     super.key,
     required this.root,
@@ -21,10 +23,11 @@ class WorkspaceTreeBrowser extends StatefulWidget {
   final bool loading;
 
   @override
-  State<WorkspaceTreeBrowser> createState() => _WorkspaceTreeBrowserState();
+  ConsumerState<WorkspaceTreeBrowser> createState() =>
+      _WorkspaceTreeBrowserState();
 }
 
-class _WorkspaceTreeBrowserState extends State<WorkspaceTreeBrowser> {
+class _WorkspaceTreeBrowserState extends ConsumerState<WorkspaceTreeBrowser> {
   String? _selectedPath;
 
   void _clearSelection() => setState(() => _selectedPath = null);
@@ -46,6 +49,7 @@ class _WorkspaceTreeBrowserState extends State<WorkspaceTreeBrowser> {
   @override
   Widget build(BuildContext context) {
     final colors = context.workbenchColors;
+    final explorer = ref.watch(workspaceTreeExplorerProvider);
 
     if (widget.loading && widget.root == null) {
       return const Center(child: CircularProgressIndicator());
@@ -101,6 +105,7 @@ class _WorkspaceTreeBrowserState extends State<WorkspaceTreeBrowser> {
                   node: root,
                   depth: 0,
                   selectedPath: _selectedPath,
+                  expandedPaths: explorer.expandedPaths,
                   onLongPress: _selectPath,
                   onOpenFile: widget.onOpenFile,
                 )
@@ -110,6 +115,7 @@ class _WorkspaceTreeBrowserState extends State<WorkspaceTreeBrowser> {
                     node: child,
                     depth: 0,
                     selectedPath: _selectedPath,
+                    expandedPaths: explorer.expandedPaths,
                     onLongPress: _selectPath,
                     onOpenFile: widget.onOpenFile,
                   ),
@@ -121,11 +127,12 @@ class _WorkspaceTreeBrowserState extends State<WorkspaceTreeBrowser> {
   }
 }
 
-class _TreeTile extends StatefulWidget {
+class _TreeTile extends ConsumerWidget {
   const _TreeTile({
     required this.node,
     required this.depth,
     required this.selectedPath,
+    required this.expandedPaths,
     required this.onLongPress,
     this.onOpenFile,
   });
@@ -133,36 +140,31 @@ class _TreeTile extends StatefulWidget {
   final RouteNode node;
   final int depth;
   final String? selectedPath;
+  final Set<String> expandedPaths;
   final ValueChanged<String> onLongPress;
   final void Function(String path)? onOpenFile;
 
   @override
-  State<_TreeTile> createState() => _TreeTileState();
-}
-
-class _TreeTileState extends State<_TreeTile> {
-  bool _expanded = false;
-
-  List<RouteNode> get _children => widget.node.children;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.workbenchColors;
-    final selected = widget.selectedPath == widget.node.path;
-    final isFolder = widget.node.isFolder;
-    final hasChildren = _children.isNotEmpty;
+    final selected = selectedPath == node.path;
+    final isFolder = node.isFolder;
+    final children = node.children;
+    final hasChildren = children.isNotEmpty;
+    final expanded = expandedPaths.contains(node.path);
+    final explorer = ref.read(workspaceTreeExplorerProvider.notifier);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         GestureDetector(
-          onLongPress: () => widget.onLongPress(widget.node.path),
+          onLongPress: () => onLongPress(node.path),
           child: ListTile(
             dense: true,
-            contentPadding: EdgeInsets.only(left: 8.0 + widget.depth * 16),
+            contentPadding: EdgeInsets.only(left: 8.0 + depth * 16),
             leading: Icon(
               isFolder
-                  ? (_expanded
+                  ? (expanded
                       ? Icons.folder_open_outlined
                       : Icons.folder_outlined)
                   : Icons.insert_drive_file_outlined,
@@ -170,11 +172,11 @@ class _TreeTileState extends State<_TreeTile> {
               color: isFolder ? colors.aiEditedFileFg : colors.fgMuted,
             ),
             title: Text(
-              widget.node.asset,
+              node.asset,
               style: workbenchMonoStyle(context, size: 13),
             ),
             subtitle: Text(
-              widget.node.path,
+              node.path,
               style: TextStyle(color: colors.fgMuted, fontSize: 10),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -182,32 +184,33 @@ class _TreeTileState extends State<_TreeTile> {
             trailing: hasChildren
                 ? IconButton(
                     icon: Icon(
-                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      expanded ? Icons.expand_less : Icons.expand_more,
                       size: 18,
                       color: colors.fgMuted,
                     ),
-                    onPressed: () => setState(() => _expanded = !_expanded),
+                    onPressed: () => explorer.toggleExpanded(node.path),
                   )
                 : null,
             selected: selected,
             selectedTileColor: colors.aiCommandBg.withValues(alpha: 0.35),
             onTap: () {
               if (hasChildren) {
-                setState(() => _expanded = !_expanded);
+                explorer.toggleExpanded(node.path);
               } else if (!isFolder) {
-                widget.onOpenFile?.call(widget.node.path);
+                onOpenFile?.call(node.path);
               }
             },
           ),
         ),
-        if (_expanded)
-          for (final child in _children)
+        if (expanded)
+          for (final child in children)
             _TreeTile(
               node: child,
-              depth: widget.depth + 1,
-              selectedPath: widget.selectedPath,
-              onLongPress: widget.onLongPress,
-              onOpenFile: widget.onOpenFile,
+              depth: depth + 1,
+              selectedPath: selectedPath,
+              expandedPaths: expandedPaths,
+              onLongPress: onLongPress,
+              onOpenFile: onOpenFile,
             ),
       ],
     );

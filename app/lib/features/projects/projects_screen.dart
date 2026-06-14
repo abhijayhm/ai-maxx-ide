@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/route_node.dart';
+import '../../core/providers/projects_browse_provider.dart';
 import '../../core/providers/agent_provider.dart';
 import '../../core/providers/agent_session_provider.dart';
 import '../../core/providers/ide_file_provider.dart';
@@ -28,11 +29,10 @@ class ProjectsScreen extends ConsumerStatefulWidget {
 class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   final _searchController = TextEditingController();
   final _composerController = TextEditingController();
-  String _query = '';
   String _debouncedQuery = '';
   Timer? _debounce;
-  int _searchMode = 0;
   bool _agentExpanded = false;
+  bool _browseRestored = false;
 
   @override
   void dispose() {
@@ -43,14 +43,15 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   }
 
   void _onQueryChanged(String value) {
-    setState(() => _query = value);
+    ref.read(projectsBrowseProvider.notifier).setQuery(value);
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 200), () {
       if (!mounted) {
         return;
       }
       setState(() => _debouncedQuery = value);
-      if (_searchMode == 1 && value.trim().isNotEmpty) {
+      final searchMode = ref.read(projectsBrowseProvider).searchMode;
+      if (searchMode == 1 && value.trim().isNotEmpty) {
         ref.read(ideSearchProvider.notifier).search(value);
       }
     });
@@ -86,7 +87,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     setState(() => _agentExpanded = !_agentExpanded);
   }
 
-  bool get _isSearching => _query.trim().isNotEmpty;
+  bool get _isSearching => ref.watch(projectsBrowseProvider).isSearching;
 
   Widget _buildAgentPanel({
     required AgentState agent,
@@ -131,6 +132,16 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     final openFile = ref.watch(ideFileProvider);
     final activeSessionId = agentSessions.activeId;
     final activeMessages = agent.messagesFor(activeSessionId);
+
+    final browse = ref.watch(projectsBrowseProvider);
+    final query = browse.query;
+    final searchMode = browse.searchMode;
+
+    if (!_browseRestored) {
+      _browseRestored = true;
+      _searchController.text = query;
+      _debouncedQuery = query;
+    }
 
     if (openFile.isOpen) {
       return ColoredBox(
@@ -177,7 +188,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
       );
     }
 
-    final fileHits = _searchMode == 0
+    final fileHits = searchMode == 0
         ? searchByName(index.searchable, _debouncedQuery)
         : <RouteNode>[];
 
@@ -190,10 +201,11 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: WorkbenchSearchField(
               controller: _searchController,
-              hintText: _searchMode == 0 ? 'Search files' : 'Grep pattern',
+              hintText: searchMode == 0 ? 'Search files' : 'Grep pattern',
               onChanged: _onQueryChanged,
               onClear: () {
                 _searchController.clear();
+                ref.read(projectsBrowseProvider.notifier).clearQuery();
                 _onQueryChanged('');
               },
               onStop: agent.running
@@ -208,8 +220,10 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
               children: [
                 SegmentedToggle(
                   options: const ['File Search', 'Find'],
-                  selectedIndex: _searchMode,
-                  onChanged: (index) => setState(() => _searchMode = index),
+                  selectedIndex: searchMode,
+                  onChanged: (index) => ref
+                      .read(projectsBrowseProvider.notifier)
+                      .setSearchMode(index),
                 ),
                 const SizedBox(height: 6),
                 Align(
@@ -239,15 +253,15 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
             child: Stack(
               children: [
                 _isSearching
-                    ? (_searchMode == 0
+                    ? (searchMode == 0
                         ? _FileResultsList(
                             files: fileHits,
-                            query: _query,
+                            query: query,
                             onOpen: _openFile,
                           )
                         : _GrepResultsList(
                             grep: grep,
-                            query: _query,
+                            query: query,
                             onOpen: _openFile,
                           ))
                     : WorkspaceTreeBrowser(

@@ -4,37 +4,42 @@ import '../models/agent_model.dart';
 import 'agent_session_provider.dart';
 import 'app_providers.dart';
 
-enum ComposerAgentMode { agent, plan, ask }
+const kAutoModelId = 'auto';
+
+enum ComposerAgentMode { agent, plan }
 
 class ComposerSettingsState {
   const ComposerSettingsState({
     this.mode = ComposerAgentMode.agent,
-    this.selectedModelId,
+    this.selectedModelId = kAutoModelId,
     this.models = const [],
     this.modelsLoading = false,
     this.error,
   });
 
   final ComposerAgentMode mode;
-  final String? selectedModelId;
+  final String selectedModelId;
   final List<AgentModelInfo> models;
   final bool modelsLoading;
   final String? error;
 
-  String? get agentModeForSend {
-    switch (mode) {
-      case ComposerAgentMode.agent:
-        return 'agent';
-      case ComposerAgentMode.plan:
-        return 'plan';
-      case ComposerAgentMode.ask:
-        return null;
-    }
-  }
+  String get agentModeForSend => mode.name;
 
-  String get effectiveModelId =>
-      selectedModelId ??
-      (models.isNotEmpty ? models.first.id : 'composer-2.5');
+  /// Null means let the SDK pick (Auto).
+  String? get modelForSend =>
+      selectedModelId == kAutoModelId ? null : selectedModelId;
+
+  String get displayModelLabel {
+    if (selectedModelId == kAutoModelId) {
+      return 'Auto';
+    }
+    for (final model in models) {
+      if (model.id == selectedModelId) {
+        return model.displayName;
+      }
+    }
+    return selectedModelId;
+  }
 
   ComposerSettingsState copyWith({
     ComposerAgentMode? mode,
@@ -77,7 +82,7 @@ class ComposerSettingsNotifier extends Notifier<ComposerSettingsState> {
         loadModels();
       }
     });
-    return const ComposerSettingsState(selectedModelId: 'composer-2.5');
+    return const ComposerSettingsState();
   }
 
   Future<void> loadModels() async {
@@ -89,19 +94,11 @@ class ComposerSettingsNotifier extends Notifier<ComposerSettingsState> {
     try {
       final repo = await ref.read(agentRepositoryProvider.future);
       final models = await repo.fetchModels();
-      state = state.copyWith(
-        models: models,
-        modelsLoading: false,
-        selectedModelId: state.selectedModelId ??
-            (models.isNotEmpty ? models.first.id : 'composer-2.5'),
-      );
+      state = state.copyWith(models: models, modelsLoading: false);
     } catch (error) {
       state = state.copyWith(
         modelsLoading: false,
         error: error.toString(),
-        models: const [
-          AgentModelInfo(id: 'composer-2.5', displayName: 'Composer 2.5'),
-        ],
       );
     }
   }
