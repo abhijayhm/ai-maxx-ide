@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/auth/auth_repository.dart';
+import '../../core/db/app_database.dart';
+import '../../core/models/route_node.dart';
 import '../../core/providers/app_providers.dart';
-import '../../core/providers/files_provider.dart';
+import '../../core/providers/ide_index_provider.dart';
 import '../../theme/workbench_colors.dart';
 import '../../theme/workbench_theme.dart';
 import '../onboarding/auth_modal.dart';
@@ -18,213 +19,36 @@ class WorkspaceMenuScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
-  List<WorkspaceSummary> _workspaces = [];
-  List<_TreeEntry> _treeEntries = [];
   String? _selectedPath;
-  bool _loading = true;
   bool _opening = false;
-  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    Future.microtask(_restoreSelection);
   }
 
-  Future<void> _load() async {
+  Future<void> _restoreSelection() async {
+    final db = await ref.read(appDatabaseProvider.future);
+    final saved = await db.getSetting(AppDatabase.lastWorkspacePathKey);
     final session = ref.read(sessionProvider).valueOrNull;
-    if (session == null || !session.isAuthenticated) {
-      setState(() {
-        _loading = false;
-        _workspaces = [];
-        _treeEntries = [];
-      });
+    if (!mounted) {
       return;
     }
-
     setState(() {
-      _loading = true;
-      _error = null;
+      _selectedPath = saved?.isNotEmpty == true
+          ? saved
+          : session?.isReady == true
+              ? null
+              : _selectedPath;
     });
-
-    try {
-      final auth = await ref.read(authRepositoryProvider.future);
-      final workspaces = await auth.listWorkspaces();
-      final roots = await auth.listFileRoots();
-      setState(() {
-        _workspaces = workspaces;
-        _treeEntries = roots
-            .map(
-              (root) => _TreeEntry(
-                name: root.name.isEmpty ? root.fullPath : root.name,
-                path: root.fullPath,
-                isDirectory: true,
-                depth: 0,
-              ),
-            )
-            .toList();
-        _loading = false;
-      });
-    } catch (error) {
-      setState(() {
-        _error = error.toString();
-        _loading = false;
-      });
-    }
   }
 
-  Future<void> _expandDirectory(String path, int depth) async {
-    try {
-      final auth = await ref.read(authRepositoryProvider.future);
-      final node = await auth.listByPath(path);
-      final children = node.children
-          .where((child) => child.type == 'directory')
-          .map(
-            (child) => _TreeEntry(
-              name: child.name,
-              path: child.path,
-              isDirectory: true,
-              depth: depth + 1,
-            ),
-          )
-          .toList();
-
-      setState(() {
-        final index = _treeEntries.indexWhere((entry) => entry.path == path);
-        if (index == -1) {
-          return;
-        }
-        _treeEntries.removeWhere(
-          (entry) => entry.depth > depth && _isDescendant(entry.path, path),
-        );
-        _treeEntries.insertAll(index + 1, children);
-        _selectedPath = path;
-      });
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load directory: $error')),
-        );
-      }
-    }
-  }
-
-  bool _isDescendant(String candidate, String parent) {
-    return candidate.startsWith('$parent/') || candidate.startsWith('$parent\\');
-  }
-
-  Future<void> _createFolder() async {
-    final parent = _selectedPath;
-    if (parent == null || parent.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a parent folder first.')),
-      );
-      return;
-    }
-    final name = await _promptName(context, 'New folder name');
-    if (name == null || name.isEmpty) {
-      return;
-    }
-    setState(() => _opening = true);
-    try {
-      final repo = await ref.read(filesRepositoryProvider.future);
-      await repo.mkdir(parent, name);
-      await _expandDirectory(parent, _depthForPath(parent));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Created folder $name')),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $error')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _opening = false);
-      }
-    }
-  }
-
-  Future<void> _createFile() async {
-    final parent = _selectedPath;
-    if (parent == null || parent.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a parent folder first.')),
-      );
-      return;
-    }
-    final name = await _promptName(context, 'New file name');
-    if (name == null || name.isEmpty) {
-      return;
-    }
-    setState(() => _opening = true);
-    try {
-      final repo = await ref.read(filesRepositoryProvider.future);
-      await repo.touch(parent, name);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Created file $name')),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $error')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _opening = false);
-      }
-    }
-  }
-
-  int _depthForPath(String path) {
-    for (final entry in _treeEntries) {
-      if (entry.path == path) {
-        return entry.depth;
-      }
-    }
-    return 0;
-  }
-
-  Future<String?> _promptName(BuildContext context, String title) async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openWorkspace() async {
+  Future<void> _openSelected() async {
     final path = _selectedPath;
     if (path == null || path.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a folder from exposed roots.')),
-      );
       return;
     }
-
     setState(() => _opening = true);
     try {
       await ref.read(sessionProvider.notifier).openWorkspace(path);
@@ -244,38 +68,11 @@ class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
     }
   }
 
-  Future<void> _selectExistingWorkspace(WorkspaceSummary workspace) async {
-    setState(() => _opening = true);
-    try {
-      await ref.read(sessionProvider.notifier).setWorkspace(workspace.id);
-      if (mounted) {
-        context.go('/projects');
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to select workspace: $error')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _opening = false);
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    ref.listen(sessionProvider, (previous, next) {
-      final wasAuth = previous?.valueOrNull?.isAuthenticated ?? false;
-      final isAuth = next.valueOrNull?.isAuthenticated ?? false;
-      if (wasAuth != isAuth) {
-        _load();
-      }
-    });
-
     final colors = context.workbenchColors;
     final session = ref.watch(sessionProvider).valueOrNull;
+    final index = ref.watch(ideIndexProvider);
     final authenticated = session?.isAuthenticated ?? false;
 
     return Scaffold(
@@ -283,127 +80,101 @@ class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _MenuHeader(
-              activeTab: _MenuTab.workspace,
-              onClose: () {
-                final ready = session?.isReady ?? false;
-                context.go(ready ? '/projects' : '/menu/workspace');
-              },
-            ),
+            _MenuHeader(onClose: () => context.go('/projects')),
             if (!authenticated)
-              _AuthenticateBanner(
-                onAuthenticate: () => showAuthModal(context, ref),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: ElevatedButton(
+                  onPressed: () => showAuthModal(context, ref),
+                  child: const Text('Authenticate'),
+                ),
               ),
+            if (index.error != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  index.error!,
+                  style: TextStyle(color: colors.statusError, fontSize: 12),
+                ),
+              ),
+            if (index.refreshing)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Refreshing…',
+                    style: TextStyle(color: colors.fgMuted, fontSize: 11),
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  index.loadedFromCache && index.hasData
+                      ? 'Showing cached tree — refreshing in background'
+                      : index.hasData
+                          ? '${index.exposedFlat.length} exposed paths'
+                          : 'Loading exposed paths…',
+                  style: TextStyle(color: colors.fgMuted, fontSize: 11),
+                ),
+              ),
+            ),
             Expanded(
-              child: _loading
+              child: index.loading && !index.hasData
                   ? const Center(child: CircularProgressIndicator())
-                  : ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        if (_error != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Text(
-                              _error!,
-                              style: TextStyle(color: colors.statusError),
-                            ),
+                  : index.exposedTree.isEmpty
+                      ? Center(
+                          child: Text(
+                            authenticated
+                                ? 'No exposed folders found on server.'
+                                : 'Authenticate to load folders.',
+                            style: TextStyle(color: colors.fgMuted),
                           ),
-                        Text(
-                          'Workspaces',
-                          style: TextStyle(
-                            color: colors.fgStrong,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        if (_workspaces.isEmpty)
-                          Text(
-                            'No workspaces yet. Open one from exposed roots below.',
-                            style: TextStyle(color: colors.fgMuted, fontSize: 13),
-                          )
-                        else
-                          ..._workspaces.map(
-                            (workspace) => ListTile(
-                              dense: true,
-                              title: Text(
-                                workspace.label.isEmpty
-                                    ? workspace.absolutePath
-                                    : workspace.label,
-                                style: workbenchMonoStyle(context),
-                              ),
-                              subtitle: Text(
-                                workspace.absolutePath,
-                                style: TextStyle(
-                                  color: colors.fgMuted,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              onTap: _opening
-                                  ? null
-                                  : () => _selectExistingWorkspace(workspace),
-                            ),
-                          ),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Exposed roots',
-                          style: TextStyle(
-                            color: colors.fgStrong,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        ..._treeEntries.map(
-                          (entry) => _TreeRow(
-                            entry: entry,
-                            selected: _selectedPath == entry.path,
-                            onTap: () => _expandDirectory(entry.path, entry.depth),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          readOnly: true,
-                          controller: TextEditingController(text: _selectedPath ?? ''),
-                          decoration: const InputDecoration(
-                            labelText: 'Selected path',
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
+                        )
+                      : ListView(
+                          padding: const EdgeInsets.all(8),
                           children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: !authenticated || _opening
-                                    ? null
-                                    : _openWorkspace,
-                                child: _opening
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Text('Open workspace'),
+                            for (final root in index.exposedTree)
+                              _RouteTreeTile(
+                                node: root,
+                                depth: 0,
+                                selectedPath: _selectedPath,
+                                onSelect: (path) =>
+                                    setState(() => _selectedPath = path),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            OutlinedButton(
-                              onPressed: !authenticated || _opening
-                                  ? null
-                                  : _createFolder,
-                              child: const Text('+ Folder'),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton(
-                              onPressed: !authenticated || _opening
-                                  ? null
-                                  : _createFile,
-                              child: const Text('+ File'),
-                            ),
                           ],
                         ),
-                      ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _selectedPath ?? 'Select a folder',
+                      style: workbenchMonoStyle(context, size: 12),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _opening || _selectedPath == null
+                        ? null
+                        : _openSelected,
+                    child: _opening
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Open workspace'),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -412,196 +183,107 @@ class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
   }
 }
 
-enum _MenuTab { workspace, git }
-
-class _MenuHeader extends StatelessWidget {
-  const _MenuHeader({
-    required this.activeTab,
-    required this.onClose,
+class _RouteTreeTile extends StatefulWidget {
+  const _RouteTreeTile({
+    required this.node,
+    required this.depth,
+    required this.selectedPath,
+    required this.onSelect,
   });
 
-  final _MenuTab activeTab;
+  final RouteNode node;
+  final int depth;
+  final String? selectedPath;
+  final ValueChanged<String> onSelect;
+
+  @override
+  State<_RouteTreeTile> createState() => _RouteTreeTileState();
+}
+
+class _RouteTreeTileState extends State<_RouteTreeTile> {
+  bool _expanded = false;
+
+  List<RouteNode> get _folderChildren =>
+      widget.node.children.where((c) => c.isFolder).toList();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.workbenchColors;
+    final selected = widget.selectedPath == widget.node.path;
+    final hasChildren = _folderChildren.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.only(left: 8.0 + widget.depth * 16),
+          leading: Icon(
+            hasChildren
+                ? (_expanded
+                    ? Icons.folder_open_outlined
+                    : Icons.folder_outlined)
+                : Icons.folder_outlined,
+            size: 18,
+            color: colors.aiEditedFileFg,
+          ),
+          title: Text(
+            widget.node.asset,
+            style: workbenchMonoStyle(context, size: 13),
+          ),
+          trailing: hasChildren
+              ? IconButton(
+                  icon: Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 18,
+                    color: colors.fgMuted,
+                  ),
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                )
+              : null,
+          selected: selected,
+          onTap: () => widget.onSelect(widget.node.path),
+        ),
+        if (_expanded)
+          for (final child in _folderChildren)
+            _RouteTreeTile(
+              node: child,
+              depth: widget.depth + 1,
+              selectedPath: widget.selectedPath,
+              onSelect: widget.onSelect,
+            ),
+      ],
+    );
+  }
+}
+
+class _MenuHeader extends StatelessWidget {
+  const _MenuHeader({required this.onClose});
+
   final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.workbenchColors;
-
     return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: colors.chrome,
         border: Border(bottom: BorderSide(color: colors.borderSubtle)),
       ),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 44,
-            child: Row(
-              children: [
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: onClose,
-                  icon: Icon(Icons.close, color: colors.fgDefault),
-                  tooltip: 'Close menu',
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => context.go('/menu/git'),
-                  icon: Icon(Icons.account_tree_outlined, color: colors.fgMuted),
-                  tooltip: 'Git menu',
-                ),
-              ],
-            ),
-          ),
-          Row(
-            children: [
-              _HeaderTab(
-                label: 'Workspace',
-                selected: activeTab == _MenuTab.workspace,
-                onTap: () => context.go('/menu/workspace'),
-              ),
-              _HeaderTab(
-                label: 'Git',
-                selected: activeTab == _MenuTab.git,
-                onTap: () => context.go('/menu/git'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HeaderTab extends StatelessWidget {
-  const _HeaderTab({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.workbenchColors;
-
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: selected ? colors.accentPrimary : Colors.transparent,
-                width: 2,
-              ),
-            ),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? colors.fgStrong : colors.fgMuted,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AuthenticateBanner extends StatelessWidget {
-  const _AuthenticateBanner({required this.onAuthenticate});
-
-  final VoidCallback onAuthenticate;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.workbenchColors;
-
-    return Container(
-      width: double.infinity,
-      color: colors.elevated,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Expanded(
+          const Expanded(
             child: Text(
-              'Authenticate with the server API key to list workspaces.',
-              style: TextStyle(color: colors.fgDefault, fontSize: 13),
+              'Workspace',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ),
-          ElevatedButton(
-            onPressed: onAuthenticate,
-            child: const Text('Authenticate'),
+          IconButton(
+            onPressed: onClose,
+            icon: Icon(Icons.close, color: colors.fgMuted),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _TreeEntry {
-  const _TreeEntry({
-    required this.name,
-    required this.path,
-    required this.isDirectory,
-    required this.depth,
-  });
-
-  final String name;
-  final String path;
-  final bool isDirectory;
-  final int depth;
-}
-
-class _TreeRow extends StatelessWidget {
-  const _TreeRow({
-    required this.entry,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final _TreeEntry entry;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.workbenchColors;
-
-    return Material(
-      color: selected ? colors.canvas : colors.chrome,
-      child: InkWell(
-        onTap: onTap,
-        child: SizedBox(
-          height: 32,
-          child: Row(
-            children: [
-              SizedBox(width: 12.0 + entry.depth * 16),
-              if (selected)
-                Container(width: 3, height: 14, color: colors.accentPrimary),
-              Icon(
-                Icons.folder_outlined,
-                size: 16,
-                color: colors.aiEditedFileFg,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  entry.name,
-                  style: workbenchMonoStyle(context, size: 12),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

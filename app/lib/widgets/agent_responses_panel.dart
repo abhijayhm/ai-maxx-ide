@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../core/agent/agent_client.dart';
+import '../core/providers/agent_provider.dart';
 import '../theme/workbench_colors.dart';
 import '../theme/workbench_theme.dart';
 
@@ -55,8 +55,12 @@ class AgentResponsesPanel extends StatelessWidget {
         }
 
         final event = messages[index];
-        final text = event.text ?? event.raw.toString();
-        final isCommand = event.type == AgentEventType.runStarted;
+        final text = event.text ?? '';
+        final isCommand = event.type == AgentEventType.message;
+
+        if (text.isEmpty) {
+          return const SizedBox.shrink();
+        }
 
         return Container(
           margin: const EdgeInsets.only(bottom: 8),

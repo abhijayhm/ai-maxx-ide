@@ -26,10 +26,10 @@ void main() {
     }
   });
 
-  test('AppConfig builds sync WebSocket URI without :0 port', () {
+  test('AppConfig builds WebSocket URI without :0 port', () {
     final config = AppConfig();
-    final uri = config.webSocketSyncUri(
-      1,
+    final uri = config.webSocketUri(
+      'watchdog/',
       queryParameters: {
         'api_key': 'test',
         'device_hash': 'abc',
@@ -39,16 +39,14 @@ void main() {
     expect(uri.scheme, 'wss');
     expect(uri.host, 'aimaxx.organisationapp.online');
     expect(uri.port, 443);
-    expect(uri.path, '/api/ws/sync/1/');
+    expect(uri.path, '/api/ws/watchdog/');
     expect(uri.toString(), isNot(contains(':0/')));
-    expect(uri.toString(), isNot(contains('https://')));
   });
 
   test('websocket paths in urls.json match ApiManifest', () {
     final ws = urlsConfig['websocket'] as Map<String, dynamic>;
-    expect(ws['agent']['path'], ApiManifest.wsAgent);
-    expect(ws['sync']['path'], 'sync/{workspace_id}/');
-    expect(ws['terminals']['path'], 'terminals/{session_id}/');
-    expect(ws['remote']['path'], ApiManifest.wsRemote);
+    expect(ws['watchdog']['path'], ApiManifest.wsWatchdog);
+    expect(ws['ide_search']['path'], ApiManifest.wsIdeSearch);
+    expect(ws['git']['path'], ApiManifest.wsGit);
   });
 }

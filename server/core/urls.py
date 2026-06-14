@@ -1,6 +1,7 @@
-from django.urls import include, path
+from django.urls import path
 
 from core import views as core_views
+from ide import views as ide_views
 
 urlpatterns = [
     path("health/", core_views.health_view, name="health"),
@@ -10,16 +11,15 @@ urlpatterns = [
         core_views.device_identifier_view,
         name="device-identifier",
     ),
-    path("workspaces/", core_views.workspace_list_create_view, name="workspace-list"),
     path(
-        "workspaces/<int:workspace_id>/",
-        core_views.workspace_detail_view,
-        name="workspace-detail",
+        "exposed_routes_tree/",
+        ide_views.exposed_routes_tree_view,
+        name="exposed-routes-tree",
     ),
+    path("workspaces/", ide_views.workspace_open_view, name="workspace-open"),
     path(
-        "workspaces/<int:workspace_id>/bind-cursor/",
-        core_views.workspace_bind_cursor_view,
-        name="workspace-bind-cursor",
+        "workspaces/<int:workspace_id>/tree/",
+        ide_views.workspace_tree_view,
+        name="workspace-tree",
     ),
-    path("workspaces/<int:workspace_id>/sync/", include("files.urls_sync")),
 ]

@@ -5,7 +5,8 @@ import '../auth/auth_repository.dart';
 import '../config/app_config.dart';
 import '../db/app_database.dart';
 import '../device_identifier.dart';
-import 'sync_provider.dart';
+import 'ide_index_provider.dart';
+import 'watchdog_provider.dart';
 
 final appConfigProvider = Provider<AppConfig>((ref) => AppConfig());
 
@@ -57,7 +58,7 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
     if (!snapshot.isRegistered && snapshot.apiKey.isNotEmpty) {
       snapshot = await _tryAutoRegister(snapshot);
     }
-    _kickoffBackgroundSync(snapshot);
+    _kickoffIdeServices(snapshot);
     return snapshot;
   }
 
@@ -88,11 +89,6 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
     }
   }
 
-  /// Loads session from local storage without depending on [authRepositoryProvider].
-  ///
-  /// [refresh] must not set [AsyncLoading]: [apiClientProvider] awaits
-  /// [sessionProvider.future], so loading state would deadlock refresh and
-  /// leave workspace open/select stuck on the spinner.
   Future<SessionSnapshot> _loadSessionSnapshot() async {
     final database = await ref.read(appDatabaseProvider.future);
     final config = ref.read(appConfigProvider);
@@ -132,33 +128,23 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
     ref.invalidate(apiClientProvider);
   }
 
-  Future<void> setWorkspace(int workspaceId) async {
+  Future<void> openWorkspace(String folderPath) async {
     final auth = await ref.read(authRepositoryProvider.future);
-    await auth.setActiveWorkspace(workspaceId);
+    final workspace = await auth.openWorkspace(folderPath);
     await refresh();
-    ref.read(workspaceSyncProvider.notifier).start(workspaceId);
+    await ref.read(ideIndexProvider.notifier).refreshWorkspace(
+          workspace.id,
+          background: true,
+        );
+    await ref.read(watchdogProvider.notifier).connect();
   }
 
-  Future<void> openWorkspace(String absolutePath) async {
-    final auth = await ref.read(authRepositoryProvider.future);
-    final workspace = await auth.openWorkspace(absolutePath);
-    await refresh();
-    ref.read(workspaceSyncProvider.notifier).start(workspace.id);
-  }
-
-  void _kickoffBackgroundSync(SessionSnapshot snapshot) {
-    final workspaceId = int.tryParse(snapshot.activeWorkspaceId ?? '');
-    if (!snapshot.isReady || workspaceId == null) {
+  void _kickoffIdeServices(SessionSnapshot snapshot) {
+    if (!snapshot.isReady) {
       return;
     }
-
-    final syncState = ref.read(workspaceSyncProvider);
-    if (syncState.isActive && syncState.workspaceId == workspaceId) {
-      return;
-    }
-
-    Future.microtask(
-      () => ref.read(workspaceSyncProvider.notifier).start(workspaceId),
-    );
+    Future.microtask(() async {
+      await ref.read(watchdogProvider.notifier).connect();
+    });
   }
 }

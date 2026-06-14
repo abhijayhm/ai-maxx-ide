@@ -5,7 +5,6 @@ from rest_framework.test import APIClient
 
 from core.models import DeviceIdentifier, Workspace
 from core.utils.hashing import compute_device_hash
-from terminals.models import Terminal, TerminalStatus
 
 
 @pytest.fixture
@@ -70,44 +69,6 @@ def workspace_client(api_client, workspace):
     return api_client
 
 
-@pytest.fixture
-def terminal(db, registered_device, workspace):
-    return Terminal.objects.create(
-        device=registered_device,
-        workspace=workspace,
-        name="ws-test",
-        shell="powershell",
-        cwd=workspace.absolute_path,
-        status=TerminalStatus.ACTIVE,
-    )
-
-
-@pytest.fixture
-def closed_terminal(db, registered_device, workspace):
-    return Terminal.objects.create(
-        device=registered_device,
-        workspace=workspace,
-        name="closed",
-        shell="powershell",
-        cwd=workspace.absolute_path,
-        status=TerminalStatus.CLOSED,
-    )
-
-
 @pytest.fixture(autouse=True)
-def fake_pty_backend(monkeypatch):
-    monkeypatch.setenv("TERMINAL_PTY_BACKEND", "fake")
-
-
-@pytest.fixture(autouse=True)
-def stub_cursor_agent(settings, monkeypatch):
-    """Tests must not call the real Cursor SDK (hangs without credentials/network)."""
-    monkeypatch.setenv("CURSOR_API_KEY", "")
-    settings.CURSOR_API_KEY = ""
-
-
-@pytest.fixture(autouse=True)
-def stub_remote_webrtc(settings, monkeypatch):
-    """WebRTC tests use fake SDP — keep stub answers (no real peer negotiation)."""
-    monkeypatch.setenv("REMOTE_WEBRTC_STUB", "true")
-    settings.REMOTE_WEBRTC_STUB = True
+def disable_watchdog(monkeypatch):
+    monkeypatch.setenv("IDE_WATCHDOG_ENABLED", "false")

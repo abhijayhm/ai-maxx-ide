@@ -91,37 +91,26 @@ class AuthRepository {
   }
 
   Future<List<WorkspaceSummary>> listWorkspaces() async {
-    final response = await _apiClient.get<List<dynamic>>('workspaces/');
-    final data = response.data ?? [];
-    return data
-        .map((item) => WorkspaceSummary.fromJson(item as Map<String, dynamic>))
-        .toList();
+    return const [];
   }
 
-  Future<WorkspaceSummary> openWorkspace(String absolutePath) async {
+  Future<WorkspaceSummary> openWorkspace(String folderPath) async {
     final response = await _apiClient.post<Map<String, dynamic>>(
       'workspaces/',
-      data: {'absolute_path': absolutePath},
+      data: {'path': folderPath},
     );
-    final workspace = WorkspaceSummary.fromJson(response.data!);
+    final body = response.data!;
+    final workspace = WorkspaceSummary(
+      id: body['id'] as int,
+      absolutePath: body['path'] as String? ?? folderPath,
+      label: body['label'] as String? ?? folderPath,
+    );
     await setActiveWorkspace(workspace.id);
-    return workspace;
-  }
-
-  Future<List<FileRoot>> listFileRoots() async {
-    final response = await _apiClient.get<List<dynamic>>('files/roots/');
-    final data = response.data ?? [];
-    return data
-        .map((item) => FileRoot.fromJson(item as Map<String, dynamic>))
-        .toList();
-  }
-
-  Future<FileNode> listByPath(String path) async {
-    final response = await _apiClient.get<Map<String, dynamic>>(
-      'files/by-path/',
-      queryParameters: {'path': path},
+    await _database.setSetting(
+      AppDatabase.lastWorkspacePathKey,
+      workspace.absolutePath,
     );
-    return FileNode.fromJson(response.data!);
+    return workspace;
   }
 }
 
@@ -164,69 +153,6 @@ class WorkspaceSummary {
       id: json['id'] as int,
       absolutePath: json['absolute_path'] as String,
       label: json['label'] as String? ?? '',
-    );
-  }
-}
-
-class FileRoot {
-  const FileRoot({
-    required this.name,
-    required this.fullPath,
-  });
-
-  final String name;
-  final String fullPath;
-
-  factory FileRoot.fromJson(Map<String, dynamic> json) {
-    return FileRoot(
-      name: json['name'] as String? ?? '',
-      fullPath: json['full_path'] as String,
-    );
-  }
-}
-
-class FileNode {
-  const FileNode({
-    required this.type,
-    required this.path,
-    required this.name,
-    required this.children,
-  });
-
-  final String type;
-  final String path;
-  final String name;
-  final List<FileChild> children;
-
-  factory FileNode.fromJson(Map<String, dynamic> json) {
-    final rawChildren = json['children'] as List<dynamic>? ?? [];
-    return FileNode(
-      type: json['type'] as String? ?? 'directory',
-      path: json['path'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      children: rawChildren
-          .map((item) => FileChild.fromJson(item as Map<String, dynamic>))
-          .toList(),
-    );
-  }
-}
-
-class FileChild {
-  const FileChild({
-    required this.name,
-    required this.path,
-    required this.type,
-  });
-
-  final String name;
-  final String path;
-  final String type;
-
-  factory FileChild.fromJson(Map<String, dynamic> json) {
-    return FileChild(
-      name: json['name'] as String? ?? '',
-      path: json['path'] as String? ?? '',
-      type: json['type'] as String? ?? 'file',
     );
   }
 }

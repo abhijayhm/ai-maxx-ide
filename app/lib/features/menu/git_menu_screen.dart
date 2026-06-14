@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/git_provider.dart';
-import '../../core/repositories/git_repository.dart';
+import '../../core/models/git_models.dart';
 import '../../theme/workbench_colors.dart';
 import '../../theme/workbench_theme.dart';
 
@@ -16,7 +16,6 @@ class GitMenuScreen extends ConsumerStatefulWidget {
 
 class _GitMenuScreenState extends ConsumerState<GitMenuScreen> {
   final _commitController = TextEditingController();
-  final _commandController = TextEditingController();
   String? _selectedBranch;
 
   @override
@@ -28,7 +27,6 @@ class _GitMenuScreenState extends ConsumerState<GitMenuScreen> {
   @override
   void dispose() {
     _commitController.dispose();
-    _commandController.dispose();
     super.dispose();
   }
 
@@ -104,11 +102,7 @@ class _GitMenuScreenState extends ConsumerState<GitMenuScreen> {
                     children: [
                       _QuickAction(
                         label: 'Add',
-                        onTap: () async {
-                          for (final file in git.files) {
-                            await ref.read(gitProvider.notifier).stage(file.path);
-                          }
-                        },
+                        onTap: () => ref.read(gitProvider.notifier).stageAll(),
                       ),
                       _QuickAction(
                         label: 'Stash',
@@ -124,10 +118,6 @@ class _GitMenuScreenState extends ConsumerState<GitMenuScreen> {
                                 .discard(file.path);
                           }
                         },
-                      ),
-                      _QuickAction(
-                        label: 'Sync',
-                        onTap: () => ref.read(gitProvider.notifier).sync(),
                       ),
                     ],
                   ),
@@ -154,44 +144,32 @@ class _GitMenuScreenState extends ConsumerState<GitMenuScreen> {
                       ),
                     ),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _commandController,
-                    style: workbenchMonoStyle(context, size: 13),
-                    decoration: InputDecoration(
-                      hintText: 'git command…',
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.keyboard_return),
-                        onPressed: () async {
-                          final cmd = _commandController.text.trim();
-                          if (cmd.isEmpty) {
-                            return;
-                          }
-                          await ref.read(gitProvider.notifier).exec(cmd);
-                        },
+                  if (git.graphLines.isNotEmpty) ...[
+                    Text(
+                      'Graph',
+                      style: TextStyle(
+                        color: colors.fgStrong,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    onSubmitted: (value) async {
-                      if (value.trim().isEmpty) {
-                        return;
-                      }
-                      await ref.read(gitProvider.notifier).exec(value.trim());
-                    },
-                  ),
-                  if (git.lastOutput != null && git.lastOutput!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: SelectableText(
-                        git.lastOutput!,
-                        style: workbenchMonoStyle(context,
-                            size: 11, color: colors.fgMuted),
-                      ),
+                    const SizedBox(height: 8),
+                    SelectableText(
+                      git.graphLines.join('\n'),
+                      style: workbenchMonoStyle(context,
+                          size: 11, color: colors.fgMuted),
                     ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: _selectedBranch ?? git.currentBranch,
+                    const SizedBox(height: 16),
+                  ],
+                  if (git.branches.isNotEmpty)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: git.branches.contains(
+                              _selectedBranch ?? git.currentBranch,
+                            )
+                                ? (_selectedBranch ?? git.currentBranch)
+                                : git.branches.first,
                           decoration: const InputDecoration(
                             labelText: 'Branch',
                             isDense: true,

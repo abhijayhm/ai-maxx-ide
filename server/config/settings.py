@@ -47,11 +47,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "channels",
     "core",
-    "agents",
-    "files",
-    "gitapp",
-    "terminals",
-    "remote",
+    "ide",
 ]
 
 MIDDLEWARE = [

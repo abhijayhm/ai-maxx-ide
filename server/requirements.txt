@@ -11,6 +11,7 @@ cursor-sdk>=0.1
 pytest>=8.0,<9
 pytest-django>=4.8,<5
 pytest-asyncio>=0.24,<1
+watchdog>=4.0,<7
 
 # Remote desktop (WebRTC screen + input)
 aiortc>=1.9,<2
