@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/files/code_language.dart';
+import '../core/files/syntax_highlighter.dart';
 import '../theme/workbench_theme.dart';
 
 // ─── Design Tokens ───────────────────────────────────────────────────────────
@@ -10,34 +12,28 @@ import '../theme/workbench_theme.dart';
 class _C {
   static const bgApp = Color(0xFF181818);
   static const bgCanvas = Color(0xFF1F1F1F);
-  static const bgElevated = Color(0xFF222222);
-  static const bgInput = Color(0xFF313131);
 
   static const borderSubtle = Color(0xFF2B2B2B);
-  static const borderDefault = Color(0xFF3C3C3C);
 
-  static const fgDefault = Color(0xFFCCCCCC);
   static const fgStrong = Color(0xFFFFFFFF);
   static const fgMuted = Color(0xFF9D9D9D);
-  static const fgInactive = Color(0xFF6E7681);
 
   static const accentPrimary = Color(0xFF0078D4);
-  static const accentSecondaryAlpha = Color(0x402488DB);
 
   static const selectionBg = Color(0x302488DB);
-  static const selectionBorder = Color(0xFF2488DB);
+  static const searchMatch = Color(0x66B58900);
+  static const searchMatchActive = Color(0x99E3B341);
 }
 
 typedef SelectionCallback = void Function(int startLine, int endLine);
 
-/// VS Code-style read-only code viewer with line-range selection.
-///
-/// Long-press a line to start selection, long-press (or tap) another line for
-/// the end, then tap ✓ to fire [onSelection].
+/// Read-only code viewer with syntax highlighting, in-file search, and
+/// long-press line-range selection (line numbers hidden).
 class CodeViewer extends StatefulWidget {
   const CodeViewer({
     super.key,
     required this.source,
+    this.filePath,
     this.fileName = 'file',
     this.onSelection,
     this.onBack,
@@ -47,6 +43,7 @@ class CodeViewer extends StatefulWidget {
   });
 
   final String source;
+  final String? filePath;
   final String fileName;
   final SelectionCallback? onSelection;
   final VoidCallback? onBack;
@@ -59,51 +56,150 @@ class CodeViewer extends StatefulWidget {
 }
 
 class _CodeViewerState extends State<CodeViewer> {
+  static const _lineHeight = 22.0;
+
   late List<String> _lines;
+  late List<List<TextSpan>> _syntaxSpans;
+
+  final _scrollController = ScrollController();
+  final _searchController = TextEditingController();
 
   int? _selStart;
   int? _selEnd;
+
+  String _searchQuery = '';
+  List<InFileSearchMatch> _searchMatches = const [];
+  int _searchIndex = 0;
 
   bool get _hasSelection => _selStart != null;
 
   @override
   void initState() {
     super.initState();
-    _lines = widget.source.split('\n');
+    _rebuildLines();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
   void didUpdateWidget(CodeViewer old) {
     super.didUpdateWidget(old);
-    if (old.source != widget.source) {
-      _lines = widget.source.split('\n');
+    if (old.source != widget.source || old.filePath != widget.filePath) {
+      _rebuildLines();
       _clearSelection();
+      _refreshSearch();
     }
   }
 
-  void _clearSelection() => setState(() {
-        _selStart = null;
-        _selEnd = null;
+  void _rebuildLines() {
+    _lines = widget.source.split('\n');
+    final languageName = languageNameForPath(widget.filePath ?? widget.fileName);
+    _syntaxSpans = buildSyntaxLineSpans(widget.source, languageName);
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text;
+      _searchMatches = findInFileMatches(_lines, _searchQuery);
+      _searchIndex = 0;
+    });
+    if (_searchMatches.isNotEmpty) {
+      _jumpToMatch(0);
+    }
+  }
+
+  void _refreshSearch() {
+    _searchMatches = findInFileMatches(_lines, _searchQuery);
+    if (_searchIndex >= _searchMatches.length) {
+      _searchIndex = 0;
+    }
+  }
+
+  void _jumpToMatch(int index) {
+    if (_searchMatches.isEmpty) {
+      return;
+    }
+    final match = _searchMatches[index];
+    final offset = (match.line - 1) * _lineHeight;
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        offset.clamp(0.0, _scrollController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  void _nextMatch() {
+    if (_searchMatches.isEmpty) {
+      return;
+    }
+    setState(() {
+      _searchIndex = (_searchIndex + 1) % _searchMatches.length;
+    });
+    _jumpToMatch(_searchIndex);
+  }
+
+  void _prevMatch() {
+    if (_searchMatches.isEmpty) {
+      return;
+    }
+    setState(() {
+      _searchIndex =
+          (_searchIndex - 1 + _searchMatches.length) % _searchMatches.length;
+    });
+    _jumpToMatch(_searchIndex);
+  }
+
+  void _preserveScroll(void Function() update) {
+    final offset =
+        _scrollController.hasClients ? _scrollController.offset : null;
+    update();
+    if (offset == null) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) {
+        return;
+      }
+      _scrollController.jumpTo(
+        offset.clamp(0.0, _scrollController.position.maxScrollExtent),
+      );
+    });
+  }
+
+  void _clearSelection() => _preserveScroll(() {
+        setState(() {
+          _selStart = null;
+          _selEnd = null;
+        });
       });
 
   void _handleLongPress(int line1Based) {
-    setState(() {
-      if (_selStart == null) {
-        _selStart = line1Based;
-        _selEnd = null;
-      } else if (_selEnd == null) {
-        if (line1Based < _selStart!) {
-          _selEnd = _selStart;
+    _preserveScroll(() {
+      setState(() {
+        if (_selStart == null) {
           _selStart = line1Based;
+          _selEnd = null;
+        } else if (_selEnd == null) {
+          if (line1Based < _selStart!) {
+            _selEnd = _selStart;
+            _selStart = line1Based;
+          } else {
+            _selEnd = line1Based;
+          }
         } else {
-          _selEnd = line1Based;
+          _selStart = line1Based;
+          _selEnd = null;
         }
-      } else {
-        _selStart = line1Based;
-        _selEnd = null;
-      }
+      });
     });
-
     HapticFeedback.selectionClick();
   }
 
@@ -124,6 +220,14 @@ class _CodeViewerState extends State<CodeViewer> {
     return line1Based >= lo && line1Based <= hi;
   }
 
+  int? _activeSearchStartForLine(int line1Based) {
+    if (_searchMatches.isEmpty || _searchIndex >= _searchMatches.length) {
+      return null;
+    }
+    final active = _searchMatches[_searchIndex];
+    return active.line == line1Based ? active.start : null;
+  }
+
   void _confirmSelection() {
     final s = _selStart!;
     final e = _selEnd ?? s;
@@ -135,12 +239,12 @@ class _CodeViewerState extends State<CodeViewer> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return ColoredBox(
       color: _C.bgApp,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (widget.showHeader)
+          if (widget.showHeader) ...[
             _Header(
               fileName: widget.fileName,
               hasSelection: _hasSelection,
@@ -151,36 +255,140 @@ class _CodeViewerState extends State<CodeViewer> {
               onBack: widget.onBack,
               onEnterEdit: widget.onEnterEdit,
             ),
-          if (widget.showHeader)
+            Visibility(
+              visible: !_hasSelection,
+              maintainState: true,
+              maintainAnimation: true,
+              maintainSize: true,
+              child: _InFileSearchBar(
+                controller: _searchController,
+                matchCount: _searchMatches.length,
+                matchIndex: _searchIndex,
+                onPrev: _prevMatch,
+                onNext: _nextMatch,
+              ),
+            ),
             const Divider(height: 1, thickness: 1, color: _C.borderSubtle),
+          ],
           Expanded(
             child: ColoredBox(
               color: _C.bgCanvas,
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                itemCount: _lines.length,
-                itemBuilder: (ctx, i) {
-                  final line1 = i + 1;
-                  return _CodeLine(
-                    lineNumber: line1,
-                    text: _lines[i],
-                    isSelected: _isSelected(line1),
-                    wrap: widget.wrapLines,
-                    inSelectionMode: _hasSelection,
-                    onLongPress: () => _handleLongPress(line1),
-                    onTap: () => _handleTap(line1),
-                    monoStyle: workbenchMonoStyle(ctx, size: 13),
-                    gutterStyle: workbenchMonoStyle(
-                      ctx,
-                      size: 13,
-                      color: _isSelected(line1) ? _C.fgDefault : _C.fgInactive,
+              child: Stack(
+                children: [
+                  ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
                     ),
-                  );
-                },
+                    itemCount: _lines.length,
+                    itemBuilder: (ctx, i) {
+                      final line1 = i + 1;
+                      final syntax = i < _syntaxSpans.length
+                          ? _syntaxSpans[i]
+                          : [TextSpan(text: _lines[i])];
+                      final highlighted = applySearchHighlights(
+                        syntax,
+                        _lines[i],
+                        _searchQuery,
+                        activeMatchStart: _activeSearchStartForLine(line1),
+                        matchColor: _C.searchMatch,
+                        activeMatchColor: _C.searchMatchActive,
+                      );
+                      return _CodeLine(
+                        spans: highlighted,
+                        isSelected: _isSelected(line1),
+                        wrap: widget.wrapLines,
+                        inSelectionMode: _hasSelection,
+                        onLongPress: () => _handleLongPress(line1),
+                        onTap: () => _handleTap(line1),
+                      );
+                    },
+                  ),
+                  if (_hasSelection)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: _SelectionStatusBar(
+                        start: _selStart!,
+                        end: _selEnd,
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
-          if (_hasSelection) _SelectionStatusBar(start: _selStart!, end: _selEnd),
+        ],
+      ),
+    );
+  }
+}
+
+class _InFileSearchBar extends StatelessWidget {
+  const _InFileSearchBar({
+    required this.controller,
+    required this.matchCount,
+    required this.matchIndex,
+    required this.onPrev,
+    required this.onNext,
+  });
+
+  final TextEditingController controller;
+  final int matchCount;
+  final int matchIndex;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = matchCount == 0
+        ? '0/0'
+        : '${matchIndex + 1}/$matchCount';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              style: workbenchMonoStyle(context, size: 12),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Find in file',
+                hintStyle: workbenchMonoStyle(
+                  context,
+                  size: 12,
+                  color: _C.fgMuted,
+                ),
+                filled: true,
+                fillColor: const Color(0xFF313131),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: const BorderSide(color: Color(0xFF3C3C3C)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: const BorderSide(color: Color(0xFF3C3C3C)),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontSize: 11, color: _C.fgMuted)),
+          _IconBtn(
+            icon: Icons.keyboard_arrow_up,
+            onTap: onPrev,
+            tooltip: 'Previous match',
+          ),
+          _IconBtn(
+            icon: Icons.keyboard_arrow_down,
+            onTap: onNext,
+            tooltip: 'Next match',
+          ),
         ],
       ),
     );
@@ -226,7 +434,7 @@ class _Header extends StatelessWidget {
             child: hasSelection
                 ? Text(
                     selEnd == null
-                        ? 'Line $selStart selected — tap end line'
+                        ? 'Line $selStart — tap end line'
                         : 'Lines $selStart to $selEnd',
                     style: const TextStyle(
                       fontSize: 14,
@@ -249,7 +457,7 @@ class _Header extends StatelessWidget {
             _IconBtn(
               icon: Icons.check,
               onTap: onConfirm,
-              tooltip: 'Confirm selection',
+              tooltip: 'Add to composer',
               color: _C.accentPrimary,
             )
           else if (!hasSelection && onEnterEdit != null)
@@ -296,28 +504,21 @@ class _IconBtn extends StatelessWidget {
 
 class _CodeLine extends StatelessWidget {
   const _CodeLine({
-    required this.lineNumber,
-    required this.text,
+    required this.spans,
     required this.isSelected,
     required this.wrap,
     required this.inSelectionMode,
     required this.onLongPress,
     required this.onTap,
-    required this.monoStyle,
-    required this.gutterStyle,
   });
 
-  final int lineNumber;
-  final String text;
+  final List<InlineSpan> spans;
   final bool isSelected;
   final bool wrap;
   final bool inSelectionMode;
   final VoidCallback onLongPress;
   final VoidCallback onTap;
-  final TextStyle monoStyle;
-  final TextStyle gutterStyle;
 
-  static const _gutterWidth = 44.0;
   static const _lineHeight = 22.0;
 
   @override
@@ -326,62 +527,31 @@ class _CodeLine extends StatelessWidget {
         ? const Border(left: BorderSide(color: _C.accentPrimary, width: 2))
         : null;
 
+    final rich = RichText(
+      text: TextSpan(children: spans),
+      softWrap: wrap,
+      overflow: wrap ? TextOverflow.visible : TextOverflow.clip,
+    );
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onLongPress: onLongPress,
       onTap: inSelectionMode ? onTap : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 80),
+        constraints: const BoxConstraints(minHeight: _lineHeight),
         decoration: BoxDecoration(
           color: isSelected ? _C.selectionBg : Colors.transparent,
           border: leftBorder,
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: _gutterWidth,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 12, top: 2, bottom: 2),
-                child: Text(
-                  '$lineNumber',
-                  textAlign: TextAlign.right,
-                  style: gutterStyle.copyWith(height: _lineHeight / 13),
-                ),
+        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+        child: wrap
+            ? rich
+            : SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: rich,
               ),
-            ),
-            Expanded(
-              child: wrap
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: _CodeText(text: text, style: monoStyle),
-                    )
-                  : SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: _CodeText(text: text, style: monoStyle),
-                    ),
-            ),
-          ],
-        ),
       ),
-    );
-  }
-}
-
-class _CodeText extends StatelessWidget {
-  const _CodeText({required this.text, required this.style});
-  final String text;
-  final TextStyle style;
-
-  static const _lineHeight = 22.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text.isEmpty ? ' ' : text,
-      softWrap: false,
-      style: style.copyWith(height: _lineHeight / 13),
     );
   }
 }
@@ -394,8 +564,8 @@ class _SelectionStatusBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = end == null
-        ? 'Tap another line to set end of selection'
-        : 'Tap ✓ to confirm lines $start – $end';
+        ? 'Long-press another line to set the end'
+        : 'Tap ✓ to add @path:$start-$end to composer';
 
     return Container(
       height: 28,
@@ -412,9 +582,12 @@ class _SelectionStatusBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12, color: _C.fgMuted),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: _C.fgMuted),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -481,6 +654,7 @@ class _FileCodeViewerState extends State<FileCodeViewer> {
         }
         return CodeViewer(
           source: snap.data!,
+          filePath: widget.filePath,
           fileName: _displayName,
           wrapLines: widget.wrapLines,
           onSelection: widget.onSelection,

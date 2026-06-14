@@ -78,9 +78,10 @@ class AgentEvent {
     switch (type) {
       case 'stream':
         final message = frame['message'] as Map<String, dynamic>? ?? {};
-        final text = message['text'] as String? ??
-            message['content'] as String? ??
-            frame['text'] as String?;
+        final text = frame['text'] as String? ??
+            _extractAssistantText(message) ??
+            message['text'] as String? ??
+            message['content'] as String?;
         return AgentEvent(type: AgentEventType.stream, raw: frame, text: text);
       case 'run_started':
         return AgentEvent(type: AgentEventType.runStarted, raw: frame);
@@ -111,5 +112,26 @@ class AgentEvent {
       default:
         return null;
     }
+  }
+
+  static String? _extractAssistantText(Map<String, dynamic> message) {
+    final content = message['content'];
+    if (content is! List) {
+      final nested = message['message'];
+      if (nested is Map<String, dynamic>) {
+        return _extractAssistantText(nested);
+      }
+      return null;
+    }
+    final parts = <String>[];
+    for (final block in content) {
+      if (block is Map<String, dynamic> && block['type'] == 'text') {
+        final text = block['text'] as String?;
+        if (text != null && text.isNotEmpty) {
+          parts.add(text);
+        }
+      }
+    }
+    return parts.isEmpty ? null : parts.join();
   }
 }

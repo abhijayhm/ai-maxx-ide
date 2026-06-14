@@ -183,6 +183,7 @@ class _WorkspaceFileViewerState extends State<WorkspaceFileViewer> {
 
     return CodeViewer(
       source: source,
+      filePath: path,
       fileName: file.asset ?? path,
       onSelection: _onSelection,
       onBack: widget.onClose,

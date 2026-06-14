@@ -30,6 +30,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   String _debouncedQuery = '';
   Timer? _debounce;
   int _searchMode = 0;
+  bool _agentForeground = false;
 
   @override
   void dispose() {
@@ -61,13 +62,28 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     ref.read(ideFileProvider.notifier).close();
   }
 
+  void _insertContextRef(String contextRef) {
+    final current = _composerController.text;
+    final prefix = current.trim().isEmpty ? '' : '$current ';
+    final next = '$prefix$contextRef';
+    _composerController.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: next.length),
+    );
+  }
+
   void _sendComposer() {
     final text = _composerController.text.trim();
     if (text.isEmpty) {
       return;
     }
+    setState(() => _agentForeground = true);
     ref.read(agentProvider.notifier).send(text);
     _composerController.clear();
+  }
+
+  void _closeAgentForeground() {
+    setState(() => _agentForeground = false);
   }
 
   bool get _isSearching => _query.trim().isNotEmpty;
@@ -80,13 +96,42 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     final agent = ref.watch(agentProvider);
     final openFile = ref.watch(ideFileProvider);
 
+    if (_agentForeground) {
+      return _buildAgentForeground(colors, agent);
+    }
+
+    if (openFile.isOpen) {
+      return ColoredBox(
+        color: colors.canvas,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: WorkspaceFileViewer(
+                file: openFile,
+                onClose: _closeFile,
+                onPickRange: _insertContextRef,
+              ),
+            ),
+            ComposerCard(
+              controller: _composerController,
+              running: agent.running,
+              onSend: _sendComposer,
+              onStop: agent.running
+                  ? () => ref.read(agentProvider.notifier).stop()
+                  : null,
+            ),
+          ],
+        ),
+      );
+    }
+
     final fileHits = _searchMode == 0
         ? searchByName(index.searchable, _debouncedQuery)
         : <RouteNode>[];
 
-    final fileOpen = openFile.isOpen;
-    final resultsFlex = fileOpen ? 4 : (_isSearching ? 3 : 2);
-    final agentFlex = (fileOpen || _isSearching) ? 0 : 3;
+    final resultsFlex = _isSearching ? 3 : 2;
+    final agentFlex = _isSearching ? 0 : 3;
 
     return ColoredBox(
       color: colors.canvas,
@@ -144,35 +189,27 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
           const SizedBox(height: 8),
           Expanded(
             flex: resultsFlex == 0 ? 1 : resultsFlex,
-            child: fileOpen
-                ? WorkspaceFileViewer(
-                    file: openFile,
-                    onClose: _closeFile,
-                    onPickRange: (contextRef) {
-                      ref.read(agentProvider.notifier).sendContextRef(contextRef);
-                    },
-                  )
-                : _isSearching
-                    ? (_searchMode == 0
-                        ? _FileResultsList(
-                            files: fileHits,
-                            query: _query,
-                            onOpen: _openFile,
-                          )
-                        : _GrepResultsList(
-                            grep: grep,
-                            query: _query,
-                            onOpen: _openFile,
-                          ))
-                    : Center(
-                        child: Text(
-                          index.loading
-                              ? 'Loading workspace index…'
-                              : 'Type to search indexed files by name.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: colors.fgMuted, fontSize: 13),
-                        ),
-                      ),
+            child: _isSearching
+                ? (_searchMode == 0
+                    ? _FileResultsList(
+                        files: fileHits,
+                        query: _query,
+                        onOpen: _openFile,
+                      )
+                    : _GrepResultsList(
+                        grep: grep,
+                        query: _query,
+                        onOpen: _openFile,
+                      ))
+                : Center(
+                    child: Text(
+                      index.loading
+                          ? 'Loading workspace index…'
+                          : 'Type to search indexed files by name.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: colors.fgMuted, fontSize: 13),
+                    ),
+                  ),
           ),
           if (agentFlex > 0)
             Expanded(
@@ -188,6 +225,65 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                 ],
               ),
             ),
+          ComposerCard(
+            controller: _composerController,
+            running: agent.running,
+            onSend: _sendComposer,
+            onStop: agent.running
+                ? () => ref.read(agentProvider.notifier).stop()
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAgentForeground(WorkbenchColors colors, AgentState agent) {
+    return ColoredBox(
+      color: colors.canvas,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            height: 48,
+            color: colors.app,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: _closeAgentForeground,
+                  icon: Icon(Icons.close, color: colors.fgMuted, size: 20),
+                  tooltip: 'Close',
+                ),
+                Text(
+                  'Agent',
+                  style: TextStyle(
+                    color: colors.fgStrong,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (agent.running) ...[
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colors.accentPrimary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Divider(height: 1, color: colors.borderSubtle),
+          Expanded(
+            child: AgentResponsesPanel(
+              messages: agent.messages,
+              running: agent.running,
+            ),
+          ),
           ComposerCard(
             controller: _composerController,
             running: agent.running,

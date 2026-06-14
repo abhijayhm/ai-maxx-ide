@@ -64,7 +64,9 @@ class AgentNotifier extends Notifier<AgentState> {
     await _client!.sendMessage(trimmed);
   }
 
-  Future<void> sendContextRef(String contextRef) => send(contextRef);
+  Future<void> sendContextRef(String contextRef) async {
+    // Context refs are inserted into the composer by the UI — not sent directly.
+  }
 
   Future<void> stop() async {
     _client?.stop();

@@ -83,17 +83,7 @@ class _WorkspaceCodeEditorState extends State<WorkspaceCodeEditor> {
           child: CodeField(
             controller: controller,
             textStyle: workbenchMonoStyle(context, size: 13),
-            gutterStyle: GutterStyle(
-              showErrors: true,
-              showFoldingHandles: true,
-              showLineNumbers: true,
-              background: colors.app,
-              textStyle: workbenchMonoStyle(
-                context,
-                size: 11,
-                color: colors.fgInactive,
-              ),
-            ),
+            gutterStyle: GutterStyle.none,
           ),
         ),
       ),

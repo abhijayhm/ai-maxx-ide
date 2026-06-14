@@ -79,3 +79,66 @@ Mode? languageForPath(String path) {
       return null;
   }
 }
+
+/// Language name string for [highlight.parse] / [HighlightView].
+String? languageNameForPath(String path) {
+  final dot = path.lastIndexOf('.');
+  if (dot < 0) {
+    return null;
+  }
+  switch (path.substring(dot + 1).toLowerCase()) {
+    case 'dart':
+      return 'dart';
+    case 'py':
+      return 'python';
+    case 'js':
+    case 'mjs':
+    case 'cjs':
+    case 'jsx':
+      return 'javascript';
+    case 'ts':
+    case 'tsx':
+    case 'mts':
+    case 'cts':
+      return 'typescript';
+    case 'json':
+      return 'json';
+    case 'md':
+    case 'markdown':
+      return 'markdown';
+    case 'yaml':
+    case 'yml':
+      return 'yaml';
+    case 'html':
+    case 'htm':
+      return 'html';
+    case 'xml':
+    case 'svg':
+      return 'xml';
+    case 'css':
+      return 'css';
+    case 'scss':
+      return 'scss';
+    case 'sql':
+      return 'sql';
+    case 'sh':
+    case 'bash':
+    case 'zsh':
+      return 'bash';
+    case 'java':
+      return 'java';
+    case 'kt':
+    case 'kts':
+      return 'kotlin';
+    case 'go':
+      return 'go';
+    case 'rs':
+      return 'rust';
+    case 'swift':
+      return 'swift';
+    case 'php':
+      return 'php';
+    default:
+      return null;
+  }
+}
