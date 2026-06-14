@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -27,6 +28,32 @@ def _run_script_mode(argv: list[str]) -> int:
     return run_script_main(argv)
 
 
+def _diagnose() -> int:
+    from standalone.bootstrap import ensure_native_dll_paths, ensure_runtime, is_frozen
+
+    ensure_runtime()
+    ensure_native_dll_paths()
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
+    import django
+
+    django.setup()
+
+    from remote.screen import AIORTC_AVAILABLE
+    from remote.webrtc import webrtc_enabled
+
+    from django.conf import settings as django_settings
+
+    payload = {
+        "frozen": is_frozen(),
+        "aiortc_available": AIORTC_AVAILABLE,
+        "webrtc_enabled": webrtc_enabled(),
+        "remote_webrtc_stub": django_settings.REMOTE_WEBRTC_STUB,
+    }
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
 def _run_server(host: str, port: int) -> None:
     from standalone.bootstrap import ensure_runtime
 
@@ -36,21 +63,26 @@ def _run_server(host: str, port: int) -> None:
 
     import django
     from django.core.management import call_command
+    from remote.screen import AIORTC_AVAILABLE
+    from remote.webrtc import webrtc_enabled
 
     django.setup()
-    call_command("migrate", "--noinput", verbosity=1)
+    from django.conf import settings as django_settings
 
-    import uvicorn
+    logger = logging.getLogger(__name__)
+    logger.info(
+        "Remote desktop: aiortc=%s webrtc=%s stub=%s",
+        AIORTC_AVAILABLE,
+        webrtc_enabled(),
+        django_settings.REMOTE_WEBRTC_STUB,
+    )
+    call_command("migrate", "--noinput", verbosity=1)
+    call_command("collectstatic", "--noinput", verbosity=0)
+
+    from standalone.asgi_server import run_daphne
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    logging.getLogger(__name__).info("Starting ai-maxx-ide on http://%s:%s", host, port)
-    uvicorn.run(
-        "config.asgi:application",
-        host=host,
-        port=port,
-        log_level="info",
-        factory=False,
-    )
+    run_daphne(host, port)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -59,6 +91,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args[:1] == ["--run-script"]:
         return _run_script_mode(args[1:])
+    if args[:1] == ["--diagnose"]:
+        return _diagnose()
 
     parser = argparse.ArgumentParser(description="ai-maxx-ide standalone server")
     parser.add_argument("--host", default=None, help="Bind host (default from .env BIND_HOST)")

@@ -7,6 +7,7 @@ from rest_framework.response import Response
 
 from agents.cursor_bridge import ensure_session_agent, get_status, list_models, stop_run
 from core.authentication import DeviceAPIKeyAuthentication
+from core.exceptions import error_response
 from core.models import AgentMessage, AgentSession
 from core.permissions import IsRegisteredDevice, RequiresWorkspace, get_workspace_from_request
 from core.serializers import AgentMessageSerializer, AgentSessionSerializer
@@ -36,7 +37,15 @@ def agent_sessions_view(request):
 
     session = AgentSession.objects.create(workspace=workspace, device=device)
     model = request.data.get("model")
-    _run_async(ensure_session_agent(workspace, session, model))
+    try:
+        _run_async(ensure_session_agent(workspace, session, model))
+    except Exception as exc:
+        session.delete()
+        return error_response(
+            "agent_bridge_failed",
+            str(exc),
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
     return Response(AgentSessionSerializer(session).data, status=status.HTTP_201_CREATED)
 
 

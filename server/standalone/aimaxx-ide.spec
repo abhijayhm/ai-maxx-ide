@@ -32,7 +32,7 @@ hiddenimports: list = [
     "standalone.bootstrap",
     "standalone.entrypoint",
     "standalone.run_script",
-    "standalone.script_runner",
+    "standalone.asgi_server",
     "config.settings",
     "config.asgi",
     "config.routing",
@@ -44,7 +44,7 @@ hiddenimports: list = [
     "dashboard.apps",
     "agents.consumers",
     "agents.urls",
-    "agents.cursor_bridge",
+    "agents.bridge_launcher",
     "files.urls",
     "ide.consumers",
     "ide.views",
@@ -83,6 +83,8 @@ for package in (
     "twisted",
     "autobahn",
     "OpenSSL",
+    "whitenoise",
+    "cursor_sdk",
 ):
     try:
         pkg_datas, pkg_binaries, pkg_hidden = collect_all(package)
@@ -136,7 +138,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -151,7 +153,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name="aimaxx-ide",
 )

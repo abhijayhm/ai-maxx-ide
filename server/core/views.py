@@ -25,7 +25,18 @@ from core.utils.paths import PathNotAllowedError, resolve_allowed_path
 @authentication_classes([])
 @permission_classes([AllowAny])
 def health_view(request):
-    return Response({"ok": True})
+    from remote.screen import AIORTC_AVAILABLE
+    from remote.webrtc import webrtc_enabled
+    from standalone.bootstrap import is_frozen
+
+    return Response(
+        {
+            "ok": True,
+            "frozen": is_frozen(),
+            "aiortc": AIORTC_AVAILABLE,
+            "webrtc": webrtc_enabled(),
+        }
+    )
 
 
 @api_view(["POST"])

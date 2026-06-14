@@ -16,6 +16,8 @@ echo Installing packaging deps...
 if errorlevel 1 exit /b 1
 
 echo Building aimaxx-ide.exe ...
+taskkill /IM aimaxx-ide.exe /F >nul 2>&1
+timeout /t 2 /nobreak >nul
 "%PY%" -m PyInstaller standalone\aimaxx-ide.spec --noconfirm --distpath standalone\dist --workpath standalone\build
 if errorlevel 1 exit /b 1
 

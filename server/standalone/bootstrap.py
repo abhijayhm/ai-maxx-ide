@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -70,8 +71,21 @@ def _write_frozen_python_launcher(scripts_dst: Path) -> None:
     )
 
 
+def ensure_native_dll_paths() -> None:
+    """Help PyInstaller builds load av/ffmpeg and other native wheels on Windows."""
+    if not is_frozen() or sys.platform != "win32":
+        return
+    if not hasattr(os, "add_dll_directory"):
+        return
+
+    for directory in (runtime_root(), runtime_root() / "av"):
+        if directory.is_dir():
+            os.add_dll_directory(str(directory))
+
+
 def ensure_runtime() -> None:
     """Copy .env, sample.env, scripts, and data dir into the live app folder."""
+    ensure_native_dll_paths()
     root = repo_root()
     root.mkdir(parents=True, exist_ok=True)
     (root / "data").mkdir(parents=True, exist_ok=True)
