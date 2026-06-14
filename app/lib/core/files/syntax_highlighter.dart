@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import 'package:highlight/highlight.dart' show Node, highlight;
 
+import '../../theme/workbench_theme.dart';
+
 /// Builds per-line syntax-highlighted [TextSpan]s using atom-one-dark.
 List<List<TextSpan>> buildSyntaxLineSpans(
   String source,
   String? languageName, {
   TextStyle? baseStyle,
 }) {
-  final style = baseStyle ?? const TextStyle(fontSize: 13, height: 22 / 13);
+  final style = baseStyle ?? vscodeEditorTextStyleRaw();
   final theme = atomOneDarkTheme.map(
     (key, value) => MapEntry(key, style.merge(value)),
   );

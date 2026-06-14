@@ -1,7 +1,76 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'workbench_colors.dart';
+
+/// VS Code `editor.fontFamily` defaults per platform (vscode `fontInfo.ts`).
+String vscodeEditorFontFamily() {
+  if (kIsWeb) {
+    return 'monospace';
+  }
+  if (Platform.isIOS || Platform.isMacOS) {
+    return 'Menlo';
+  }
+  if (Platform.isWindows) {
+    return 'Consolas';
+  }
+  return 'Droid Sans Mono';
+}
+
+const List<String> kVscodeEditorFontFallback = ['Courier New', 'monospace'];
+
+/// VS Code `editor.fontSize` defaults: 12 on macOS, 14 elsewhere.
+double vscodeEditorFontSize() {
+  if (kIsWeb) {
+    return 14;
+  }
+  if (Platform.isIOS || Platform.isMacOS) {
+    return 12;
+  }
+  return 14;
+}
+
+/// Monospace style matching VS Code's editor (Consolas / Menlo / Droid Sans Mono).
+TextStyle vscodeEditorTextStyle(
+  BuildContext context, {
+  double? size,
+  Color? color,
+  FontWeight? fontWeight,
+  double? height,
+}) {
+  final fontSize = size ?? vscodeEditorFontSize();
+  return TextStyle(
+    fontFamily: vscodeEditorFontFamily(),
+    fontFamilyFallback: kVscodeEditorFontFallback,
+    fontSize: fontSize,
+    height: height ?? (22 / fontSize),
+    color: color ?? context.workbenchColors.fgDefault,
+    fontWeight: fontWeight,
+    decoration: TextDecoration.none,
+  );
+}
+
+/// Same as [vscodeEditorTextStyle] without [BuildContext] (syntax highlight rebuild).
+TextStyle vscodeEditorTextStyleRaw({
+  double? size,
+  Color? color,
+  FontWeight? fontWeight,
+  double? height,
+}) {
+  final fontSize = size ?? vscodeEditorFontSize();
+  return TextStyle(
+    fontFamily: vscodeEditorFontFamily(),
+    fontFamilyFallback: kVscodeEditorFontFallback,
+    fontSize: fontSize,
+    height: height ?? (22 / fontSize),
+    color: color ?? const Color(0xFFCCCCCC),
+    fontWeight: fontWeight,
+    decoration: TextDecoration.none,
+  );
+}
 
 ThemeData buildWorkbenchTheme() {
   const colors = WorkbenchColors(

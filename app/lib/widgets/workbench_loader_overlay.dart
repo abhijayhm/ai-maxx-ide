@@ -23,7 +23,11 @@ class WorkbenchLoaderOverlay extends StatelessWidget {
                 const SizedBox(height: 16),
                 Text(
                   message,
-                  style: TextStyle(color: colors.fgDefault, fontSize: 14),
+                  style: TextStyle(
+                    color: colors.fgDefault,
+                    fontSize: 14,
+                    decoration: TextDecoration.none,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ],

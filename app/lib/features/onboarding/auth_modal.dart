@@ -31,6 +31,7 @@ class _AuthModalSheetState extends ConsumerState<_AuthModalSheet> {
   late final TextEditingController _apiKeyController;
   bool _obscure = true;
   bool _submitting = false;
+  bool _sheetClosed = false;
   String? _error;
 
   @override
@@ -69,6 +70,19 @@ class _AuthModalSheetState extends ConsumerState<_AuthModalSheet> {
     super.dispose();
   }
 
+  void _closeSheet() {
+    if (_sheetClosed || !mounted) {
+      return;
+    }
+    _sheetClosed = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pop();
+    });
+  }
+
   Future<void> _submit() async {
     final serverUrl = AppConfig.normalizeServerUrl(_serverUrlController.text);
     final apiKey = _apiKeyController.text.trim();
@@ -95,13 +109,8 @@ class _AuthModalSheetState extends ConsumerState<_AuthModalSheet> {
             apiKey,
             serverUrl: serverUrl,
           );
-      if (!mounted) {
-        return;
-      }
-      final authenticated =
-          ref.read(sessionProvider).valueOrNull?.isAuthenticated ?? false;
-      if (authenticated) {
-        Navigator.of(context).pop();
+      if (mounted) {
+        _closeSheet();
       }
     } on DioException catch (error) {
       final detail = error.response?.data;
@@ -122,17 +131,6 @@ class _AuthModalSheetState extends ConsumerState<_AuthModalSheet> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(sessionProvider, (previous, next) {
-      if (next.isLoading || _submitting) {
-        return;
-      }
-      final wasAuth = previous?.valueOrNull?.isAuthenticated ?? false;
-      final isAuth = next.valueOrNull?.isAuthenticated ?? false;
-      if (!wasAuth && isAuth && mounted) {
-        Navigator.of(context).pop();
-      }
-    });
-
     final colors = context.workbenchColors;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 

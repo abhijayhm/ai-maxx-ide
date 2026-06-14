@@ -79,7 +79,7 @@ class _WorkspaceCodeEditorState extends State<WorkspaceCodeEditor> {
         child: SingleChildScrollView(
           child: CodeField(
             controller: controller,
-            textStyle: workbenchMonoStyle(context, size: 13),
+            textStyle: vscodeEditorTextStyle(context, size: 13),
             gutterStyle: GutterStyle.none,
           ),
         ),

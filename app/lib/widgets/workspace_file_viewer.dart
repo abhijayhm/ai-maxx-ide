@@ -252,7 +252,7 @@ class _Toolbar extends StatelessWidget {
           Expanded(
             child: Text(
               fileName,
-              style: workbenchMonoStyle(context, size: 13),
+              style: vscodeEditorTextStyle(context, size: 13),
               overflow: TextOverflow.ellipsis,
             ),
           ),

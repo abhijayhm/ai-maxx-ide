@@ -100,7 +100,12 @@ class _CodeViewerState extends State<CodeViewer> {
   void _rebuildLines() {
     _lines = widget.source.split('\n');
     final languageName = languageNameForPath(widget.filePath ?? widget.fileName);
-    _syntaxSpans = buildSyntaxLineSpans(widget.source, languageName);
+    final baseStyle = vscodeEditorTextStyleRaw();
+    _syntaxSpans = buildSyntaxLineSpans(
+      widget.source,
+      languageName,
+      baseStyle: baseStyle,
+    );
   }
 
   void _onSearchChanged() {
@@ -369,11 +374,11 @@ class _InFileSearchBar extends StatelessWidget {
           Expanded(
             child: TextField(
               controller: controller,
-              style: workbenchMonoStyle(context, size: 12),
+              style: vscodeEditorTextStyle(context, size: 12),
               decoration: InputDecoration(
                 isDense: true,
                 hintText: 'Find in file',
-                hintStyle: workbenchMonoStyle(
+                hintStyle: vscodeEditorTextStyle(
                   context,
                   size: 12,
                   color: _C.fgMuted,
@@ -454,8 +459,8 @@ class _Header extends StatelessWidget {
                     selEnd == null
                         ? 'Line $selStart — tap end line'
                         : 'Lines $selStart to $selEnd',
-                    style: const TextStyle(
-                      fontSize: 14,
+                    style: vscodeEditorTextStyle(
+                      context,
                       fontWeight: FontWeight.w600,
                       color: _C.fgStrong,
                     ),
@@ -463,8 +468,8 @@ class _Header extends StatelessWidget {
                   )
                 : Text(
                     fileName,
-                    style: const TextStyle(
-                      fontSize: 14,
+                    style: vscodeEditorTextStyle(
+                      context,
                       fontWeight: FontWeight.w600,
                       color: _C.fgStrong,
                     ),

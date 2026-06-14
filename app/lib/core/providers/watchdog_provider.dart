@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/auth_repository.dart';
 import '../config/app_config.dart';
 import '../ws/ws_client.dart';
 import 'app_providers.dart';
@@ -20,25 +21,25 @@ class WatchdogNotifier extends Notifier<bool> {
     return false;
   }
 
-  Future<void> connect() async {
+  Future<void> connect({SessionSnapshot? session}) async {
     if (state) {
       return;
     }
-    final session = await ref.read(sessionProvider.future);
-    if (!session.isAuthenticated) {
+    final snapshot = session ?? ref.read(sessionProvider).valueOrNull;
+    if (snapshot == null || !snapshot.isAuthenticated) {
       return;
     }
 
     final config = ref.read(appConfigProvider);
-    config.serverUrl = AppConfig.normalizeServerUrl(session.serverUrl);
-    config.apiKey = session.apiKey;
+    config.serverUrl = AppConfig.normalizeServerUrl(snapshot.serverUrl);
+    config.apiKey = snapshot.apiKey;
 
     _ws = WsClient(
       config: config,
       readHeaders: () => (
-        apiKey: session.apiKey,
-        deviceHash: session.deviceHash,
-        workspaceId: session.activeWorkspaceId,
+        apiKey: snapshot.apiKey,
+        deviceHash: snapshot.deviceHash,
+        workspaceId: snapshot.activeWorkspaceId,
       ),
     );
 

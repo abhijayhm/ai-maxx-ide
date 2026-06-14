@@ -163,7 +163,7 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
 
     final snapshot = await auth.registerDevice(apiKey, serverUrl: normalizedUrl);
     state = AsyncData(snapshot);
-    await _kickoffIdeServices(snapshot);
+    Future.microtask(() => _kickoffIdeServices(snapshot));
   }
 
   Future<void> logout() async {
@@ -193,23 +193,46 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
   }
 
   Future<void> openWorkspace(String folderPath) async {
-    final auth = await ref.read(authRepositoryProvider.future);
+    final current = state.valueOrNull;
+    if (current == null || !current.isAuthenticated) {
+      throw StateError('Authenticate before opening a workspace.');
+    }
+
+    final database = await ref.read(appDatabaseProvider.future);
+    final config = ref.read(appConfigProvider);
+    final deviceIdentifier = ref.read(deviceIdentifierProvider);
+    final apiClient = ApiClient(
+      config: config,
+      readHeaders: () => (
+        apiKey: current.apiKey,
+        deviceHash: current.deviceHash,
+        workspaceId: current.activeWorkspaceId,
+      ),
+    );
+    final auth = AuthRepository(
+      apiClient: apiClient,
+      database: database,
+      deviceIdentifier: deviceIdentifier,
+      config: config,
+    );
+
     final workspace = await auth.openWorkspace(folderPath);
-    await refresh();
-    await ref.read(ideIndexProvider.notifier).refreshWorkspace(
-          workspace.id,
-          background: true,
-        );
-    await ref.read(watchdogProvider.notifier).connect();
-    await ref.read(agentSessionsProvider.notifier).ensureDefaultSession();
-    await ref.read(composerSettingsProvider.notifier).loadModels();
+    final snapshot = await _loadSessionSnapshot();
+    state = AsyncData(snapshot);
+    Future.microtask(() async {
+      await ref.read(ideIndexProvider.notifier).refreshWorkspace(
+            workspace.id,
+            background: true,
+          );
+      await _kickoffIdeServices(snapshot);
+    });
   }
 
   Future<void> _kickoffIdeServices(SessionSnapshot snapshot) async {
     if (!snapshot.isAuthenticated) {
       return;
     }
-    await ref.read(watchdogProvider.notifier).connect();
+    await ref.read(watchdogProvider.notifier).connect(session: snapshot);
     await ref.read(ideIndexProvider.notifier).refreshExposed(
           background: ref.read(ideIndexProvider).hasData,
           force: true,

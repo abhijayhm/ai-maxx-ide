@@ -82,7 +82,7 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
       final wasAuth = prevSession?.isAuthenticated ?? false;
       final isAuth = nextSession?.isAuthenticated ?? false;
       if (!wasAuth && isAuth) {
-        refreshExposed(background: state.hasData);
+        _refreshInFlight = false;
       } else if (wasAuth && !isAuth) {
         state = const IdeIndexState();
       }
@@ -182,19 +182,29 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
       final repo = await ref.read(ideRepositoryProvider.future);
       final roots = await repo.fetchExposedRoutesTree();
       final flat = flattenRouteTree(roots);
-      state = state.copyWith(
-        exposedTree: roots,
-        exposedFlat: flat,
-        loading: false,
-        refreshing: false,
-        loadedFromCache: false,
-      );
-      final db = await ref.read(appDatabaseProvider.future);
-      await db.saveRouteCache(
-        cacheKey: AppDatabase.cacheKeyExposed,
-        tree: roots,
-        flat: flat,
-      );
+      final keepCached = background &&
+          roots.isEmpty &&
+          state.exposedFlat.isNotEmpty;
+      if (keepCached) {
+        state = state.copyWith(
+          loading: false,
+          refreshing: false,
+        );
+      } else {
+        state = state.copyWith(
+          exposedTree: roots,
+          exposedFlat: flat,
+          loading: false,
+          refreshing: false,
+          loadedFromCache: false,
+        );
+        final db = await ref.read(appDatabaseProvider.future);
+        await db.saveRouteCache(
+          cacheKey: AppDatabase.cacheKeyExposed,
+          tree: roots,
+          flat: flat,
+        );
+      }
     } catch (error) {
       state = state.copyWith(
         loading: false,
