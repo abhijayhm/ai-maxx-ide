@@ -43,7 +43,18 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
       ref.read(ideSearchProvider.notifier).search('');
       return;
     }
-    ref.read(ideSearchProvider.notifier).search(q);
+    ref.read(ideSearchProvider.notifier).search(
+          q,
+          matchCase: browse.matchCase,
+          matchWholeWord: browse.matchWholeWord,
+        );
+  }
+
+  void _submitFindSearch() {
+    final text = _searchController.text;
+    ref.read(projectsBrowseProvider.notifier).setQuery(text);
+    setState(() => _debouncedQuery = text);
+    _runFindSearchIfNeeded();
   }
 
   @override
@@ -70,17 +81,16 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
 
   void _onQueryChanged(String value) {
     ref.read(projectsBrowseProvider.notifier).setQuery(value);
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 200), () {
-      if (!mounted) {
-        return;
-      }
-      setState(() => _debouncedQuery = value);
-      final searchMode = ref.read(projectsBrowseProvider).searchMode;
-      if (searchMode == 1 && value.trim().isNotEmpty) {
-        ref.read(ideSearchProvider.notifier).search(value);
-      }
-    });
+    final searchMode = ref.read(projectsBrowseProvider).searchMode;
+    if (searchMode == 0) {
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 200), () {
+        if (!mounted) {
+          return;
+        }
+        setState(() => _debouncedQuery = value);
+      });
+    }
   }
 
   void _openFile(String path) {
@@ -223,6 +233,8 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
               controller: _searchController,
               hintText: searchMode == 0 ? 'Search files' : 'Grep pattern',
               onChanged: _onQueryChanged,
+              showSubmit: searchMode == 1,
+              onSubmit: searchMode == 1 ? _submitFindSearch : null,
               onClear: () {
                 _searchController.clear();
                 ref.read(projectsBrowseProvider.notifier).clearQuery();
@@ -245,10 +257,35 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                   onChanged: (index) {
                     ref.read(projectsBrowseProvider.notifier).setSearchMode(index);
                     if (index == 1) {
-                      _runFindSearchIfNeeded();
+                      setState(() => _debouncedQuery = query);
                     }
                   },
                 ),
+                if (searchMode == 1) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      _FindToggleButton(
+                        label: 'Aa',
+                        selected: browse.matchCase,
+                        tooltip: 'Match case',
+                        onPressed: () => ref
+                            .read(projectsBrowseProvider.notifier)
+                            .setMatchCase(!browse.matchCase),
+                      ),
+                      const SizedBox(width: 4),
+                      _FindToggleButton(
+                        label: 'ab',
+                        underline: true,
+                        selected: browse.matchWholeWord,
+                        tooltip: 'Match whole word',
+                        onPressed: () => ref
+                            .read(projectsBrowseProvider.notifier)
+                            .setMatchWholeWord(!browse.matchWholeWord),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Align(
                   alignment: Alignment.centerRight,
@@ -325,6 +362,77 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
             ),
           _buildComposer(agent),
         ],
+      ),
+    );
+  }
+}
+
+class _FindToggleButton extends StatelessWidget {
+  const _FindToggleButton({
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+    required this.tooltip,
+    this.underline = false,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+  final String tooltip;
+  final bool underline;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.workbenchColors;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: selected ? colors.accentPrimary.withValues(alpha: 0.2) : colors.input,
+        borderRadius: BorderRadius.circular(4),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            width: 28,
+            height: 24,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: selected ? colors.accentPrimary : colors.borderDefault,
+              ),
+            ),
+            child: underline
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          color: selected ? colors.fgStrong : colors.fgMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          height: 1,
+                        ),
+                      ),
+                      Container(
+                        width: 12,
+                        height: 1,
+                        color: selected ? colors.fgStrong : colors.fgMuted,
+                      ),
+                    ],
+                  )
+                : Text(
+                    label,
+                    style: TextStyle(
+                      color: selected ? colors.fgStrong : colors.fgMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+          ),
+        ),
       ),
     );
   }

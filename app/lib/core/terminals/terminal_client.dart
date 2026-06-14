@@ -6,6 +6,7 @@ import '../ws/ws_client.dart';
 import 'terminal_models.dart';
 
 typedef TerminalOutputCallback = void Function(String chunk);
+typedef TerminalOutputFullCallback = void Function(String text);
 typedef TerminalHistoryCallback = void Function(List<TerminalIOLine> lines);
 typedef TerminalExitCallback = void Function(int code);
 typedef TerminalErrorCallback = void Function(String code, String message);
@@ -16,6 +17,7 @@ class TerminalClient {
     required AppConfig config,
     required WsSessionHeaders Function() readHeaders,
     this.onOutput,
+    this.onOutputFull,
     this.onHistory,
     this.onExit,
     this.onError,
@@ -23,6 +25,7 @@ class TerminalClient {
   }) : _ws = WsClient(config: config, readHeaders: readHeaders);
 
   final TerminalOutputCallback? onOutput;
+  final TerminalOutputFullCallback? onOutputFull;
   final TerminalHistoryCallback? onHistory;
   final TerminalExitCallback? onExit;
   final TerminalErrorCallback? onError;
@@ -61,6 +64,12 @@ class TerminalClient {
         if (raw.isNotEmpty) {
           final bytes = base64Decode(raw);
           onOutput?.call(utf8.decode(bytes, allowMalformed: true));
+        }
+      case 'output_full':
+        final raw = frame['data'] as String? ?? '';
+        if (raw.isNotEmpty) {
+          final bytes = base64Decode(raw);
+          onOutputFull?.call(utf8.decode(bytes, allowMalformed: true));
         }
       case 'exit':
         _attached = false;

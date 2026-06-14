@@ -202,38 +202,56 @@ def search_grep_view(request):
     pattern = request.data.get("pattern", "")
     glob_pattern = request.data.get("glob", "*")
     case_sensitive = request.data.get("case_sensitive", False)
+    whole_word = request.data.get("whole_word", False)
 
     if not pattern:
         return error_response("invalid_request", "Pattern is required.", status.HTTP_400_BAD_REQUEST)
 
     root = Path(workspace.absolute_path)
-    results = _run_grep(root, pattern, glob_pattern, case_sensitive)
+    results = _run_grep(root, pattern, glob_pattern, case_sensitive, whole_word)
     return Response(results)
 
 
-def _run_grep(root: Path, pattern: str, glob_pattern: str, case_sensitive: bool) -> list[dict]:
-    cmd = ["rg", "--json", pattern, str(root)]
+def _run_grep(
+    root: Path,
+    pattern: str,
+    glob_pattern: str,
+    case_sensitive: bool,
+    whole_word: bool = False,
+) -> list[dict]:
+    cmd = ["rg", "--json", "-F", pattern, str(root)]
     if not case_sensitive:
         cmd.insert(1, "-i")
+    if whole_word:
+        cmd.insert(1, "-w")
     if glob_pattern and glob_pattern != "*":
         cmd.extend(["--glob", glob_pattern])
 
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
     except FileNotFoundError:
-        return _grep_fallback(root, pattern, case_sensitive)
+        return _grep_fallback(root, pattern, case_sensitive, whole_word)
 
     if proc.returncode not in (0, 1):
-        return _grep_fallback(root, pattern, case_sensitive)
+        return _grep_fallback(root, pattern, case_sensitive, whole_word)
 
     return _parse_rg_json(proc.stdout, root)
 
 
-def _grep_fallback(root: Path, pattern: str, case_sensitive: bool) -> list[dict]:
+def _grep_fallback(
+    root: Path,
+    pattern: str,
+    case_sensitive: bool,
+    whole_word: bool = False,
+) -> list[dict]:
     import re
 
     flags = 0 if case_sensitive else re.IGNORECASE
-    regex = re.compile(pattern, flags)
+    escaped = re.escape(pattern)
+    if whole_word:
+        regex = re.compile(rf"\b{escaped}\b", flags)
+    else:
+        regex = re.compile(escaped, flags)
     results = []
     for path in root.rglob("*"):
         if not path.is_file() or path.is_symlink():
@@ -275,7 +293,7 @@ def _parse_rg_json(stdout: str, root: Path) -> list[dict]:
         data = obj.get("data", {})
         path_text = data.get("path", {}).get("text", "")
         line_num = data.get("line_number", 0)
-        text = data.get("lines", {}).get("text", "").rstrip("\n")
+        text = data.get("lines", {}).get("text", "").rstrip("\r\n")
         try:
             rel = Path(path_text).relative_to(root).as_posix()
         except ValueError:

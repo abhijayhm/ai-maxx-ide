@@ -154,3 +154,40 @@ def test_search_grep(workspace_client, workspace, exposed_root):
     assert resp.status_code == 200
     results = resp.json()
     assert len(results) >= 1
+
+
+@pytest.mark.django_db
+def test_search_grep_spaced_phrase(workspace_client, workspace, exposed_root):
+    (exposed_root / "notes.txt").write_text("say hello world here\n", encoding="utf-8")
+    resp = workspace_client.post(
+        "/api/search/grep/",
+        {
+            "pattern": "hello world",
+            "workspace_id": workspace.id,
+            "case_sensitive": False,
+        },
+        format="json",
+    )
+    assert resp.status_code == 200
+    results = resp.json()
+    assert len(results) == 1
+    assert results[0]["matches"][0]["text"] == "say hello world here"
+
+
+@pytest.mark.django_db
+def test_search_grep_whole_word(workspace_client, workspace, exposed_root):
+    (exposed_root / "words.txt").write_text("hello helloworld\n", encoding="utf-8")
+    resp = workspace_client.post(
+        "/api/search/grep/",
+        {
+            "pattern": "hello",
+            "workspace_id": workspace.id,
+            "case_sensitive": False,
+            "whole_word": True,
+        },
+        format="json",
+    )
+    assert resp.status_code == 200
+    results = resp.json()
+    assert len(results) == 1
+    assert results[0]["matches"][0]["text"] == "hello helloworld"

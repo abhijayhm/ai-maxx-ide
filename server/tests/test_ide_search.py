@@ -40,6 +40,49 @@ def test_stream_ide_search_finds_keyword(tmp_path):
     assert results[0]["text"]
 
 
+def test_stream_ide_search_finds_spaced_phrase(tmp_path):
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "main.py").write_text("print('hello world')\n", encoding="utf-8")
+
+    results = list(
+        stream_ide_search(
+            root,
+            keyword="hello world",
+            match_case=False,
+            match_exact=False,
+        )
+    )
+    assert len(results) == 1
+    assert "hello world" in results[0]["text"]
+
+
+def test_stream_ide_search_whole_word(tmp_path):
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "main.py").write_text("hello helloworld\n", encoding="utf-8")
+
+    all_hits = list(
+        stream_ide_search(
+            root,
+            keyword="hello",
+            match_case=False,
+            match_exact=False,
+        )
+    )
+    assert len(all_hits) == 2
+
+    whole_hits = list(
+        stream_ide_search(
+            root,
+            keyword="hello",
+            match_case=False,
+            match_exact=True,
+        )
+    )
+    assert len(whole_hits) == 1
+
+
 def test_stream_ide_search_respects_include_glob(tmp_path):
     root = tmp_path / "project"
     root.mkdir()

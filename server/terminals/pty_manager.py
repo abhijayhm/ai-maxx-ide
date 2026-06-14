@@ -32,24 +32,25 @@ class FakePty:
         self.cwd = cwd
         self.cols = cols
         self.rows = rows
-        self._buffer = bytearray()
+        self._out_buffer = bytearray()
         self._alive = True
         FakePty._instances[self.pid] = self
+        self._out_buffer.extend(f"[{self.shell}@{self.cwd}]$ ".encode())
 
     def write(self, data: bytes) -> None:
-        self._buffer.extend(data)
-        text = data.decode("utf-8", errors="replace").strip()
-        if text == "exit":
+        text = data.decode("utf-8", errors="replace")
+        self._out_buffer.extend(data)
+        if text.strip() == "exit":
             self._alive = False
 
     def read(self, size: int = 4096) -> bytes:
-        if self._buffer:
-            out = bytes(self._buffer[:size])
-            del self._buffer[: len(out)]
+        if self._out_buffer:
+            out = bytes(self._out_buffer[:size])
+            del self._out_buffer[: len(out)]
             return out
         if not self._alive:
             return b""
-        return f"[{self.shell}@{self.cwd}]$ ".encode()
+        return b""
 
     def set_size(self, cols: int, rows: int) -> None:
         self.cols = cols

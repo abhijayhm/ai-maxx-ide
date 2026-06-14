@@ -124,40 +124,30 @@ class IdeSearchConsumer(AsyncWebsocketConsumer):
         root = Path(workspace.absolute_path)
         keyword = content.get("keyword") or content.get("pattern") or ""
         loop = asyncio.get_running_loop()
-        queue: asyncio.Queue = asyncio.Queue()
 
         def worker():
-            try:
-                for result in stream_ide_search(
+            return list(
+                stream_ide_search(
                     root,
                     keyword=keyword,
                     match_case=bool(content.get("match_case", False)),
                     match_exact=bool(content.get("match_exact", False)),
                     files_to_include=content.get("files_to_include"),
                     files_to_exclude=content.get("files_to_exclude"),
-                ):
-                    loop.call_soon_threadsafe(queue.put_nowait, result)
-            except Exception as exc:
-                loop.call_soon_threadsafe(queue.put_nowait, exc)
-            finally:
-                loop.call_soon_threadsafe(queue.put_nowait, None)
+                )
+            )
 
-        threading.Thread(target=worker, daemon=True).start()
-
-        result_count = 0
         try:
-            while True:
-                item = await queue.get()
-                if item is None:
-                    break
-                if isinstance(item, Exception):
-                    raise item
-                result_count += 1
-                await self.send_json({"type": "result", **item})
-            _debug("ide_search", f"search_complete workspace_id={workspace.id} results={result_count}")
-            await self.send_json({"type": "search_complete"})
+            results = await asyncio.to_thread(worker)
+            _debug(
+                "ide_search",
+                f"search_complete workspace_id={workspace.id} results={len(results)}",
+            )
+            await self.send_json(
+                {"type": "search_complete", "results": results, "count": len(results)}
+            )
         except asyncio.CancelledError:
-            _debug("ide_search", f"search_cancelled workspace_id={workspace.id} results={result_count}")
+            _debug("ide_search", f"search_cancelled workspace_id={workspace.id}")
             await self.send_json({"type": "cancelled"})
         except Exception as exc:
             _debug("ide_search", f"search_failed workspace_id={workspace.id} error={exc!r}")

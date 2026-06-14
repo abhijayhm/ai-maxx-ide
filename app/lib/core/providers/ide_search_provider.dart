@@ -85,8 +85,6 @@ final ideSearchProvider =
 class IdeSearchNotifier extends Notifier<IdeSearchState> {
   WsClient? _ws;
   StreamSubscription<Map<String, dynamic>>? _sub;
-  final List<GrepMatch> _pending = [];
-  Timer? _flushTimer;
   int _searchGeneration = 0;
   LoaderHandle? _loader;
 
@@ -101,13 +99,14 @@ class IdeSearchNotifier extends Notifier<IdeSearchState> {
     _loader = null;
   }
 
-  Future<void> search(String keyword) async {
+  Future<void> search(
+    String keyword, {
+    bool matchCase = false,
+    bool matchWholeWord = false,
+  }) async {
     final trimmed = keyword.trim();
     if (trimmed.isEmpty) {
       _searchGeneration++;
-      _pending.clear();
-      _flushTimer?.cancel();
-      _flushTimer = null;
       if (_ws != null && _ws!.isConnected) {
         _ws!.send({'type': 'cancel'});
       }
@@ -135,9 +134,6 @@ class IdeSearchNotifier extends Notifier<IdeSearchState> {
         _ws!.send({'type': 'cancel'});
       }
 
-      _pending.clear();
-      _flushTimer?.cancel();
-      _flushTimer = null;
       _releaseLoader();
       state = IdeSearchState(
         searching: true,
@@ -152,8 +148,8 @@ class IdeSearchNotifier extends Notifier<IdeSearchState> {
         'type': 'search',
         'workspace_id': workspaceId,
         'keyword': trimmed,
-        'match_case': false,
-        'match_exact': false,
+        'match_case': matchCase,
+        'match_exact': matchWholeWord,
         'files_to_include': <String>[],
         'files_to_exclude': <String>[],
       });
@@ -197,16 +193,17 @@ class IdeSearchNotifier extends Notifier<IdeSearchState> {
 
   void _onFrame(Map<String, dynamic> frame) {
     final type = frame['type'] as String? ?? '';
-    if (type == 'result') {
-      _pending.add(GrepMatch.fromFrame(frame));
-      _scheduleFlush();
-      return;
-    }
 
     if (type == 'search_complete') {
-      _flushPending();
+      final raw = frame['results'];
+      final results = raw is List
+          ? raw
+              .whereType<Map<String, dynamic>>()
+              .map(GrepMatch.fromFrame)
+              .toList()
+          : const <GrepMatch>[];
       _releaseLoader();
-      state = state.copyWith(searching: false);
+      state = state.copyWith(searching: false, results: results);
       return;
     }
 
@@ -219,7 +216,6 @@ class IdeSearchNotifier extends Notifier<IdeSearchState> {
     }
 
     if (type == 'error' || type == 'connection_error') {
-      _flushPending();
       _releaseLoader();
       state = state.copyWith(
         searching: false,
@@ -236,27 +232,7 @@ class IdeSearchNotifier extends Notifier<IdeSearchState> {
     }
   }
 
-  void _scheduleFlush() {
-    _flushTimer ??= Timer(const Duration(milliseconds: 32), _flushPending);
-  }
-
-  void _flushPending() {
-    _flushTimer?.cancel();
-    _flushTimer = null;
-    if (_pending.isEmpty) {
-      return;
-    }
-    state = state.copyWith(
-      results: [...state.results, ..._pending],
-      searching: true,
-    );
-    _pending.clear();
-  }
-
   Future<void> _disconnect() async {
-    _flushTimer?.cancel();
-    _flushTimer = null;
-    _pending.clear();
     _releaseLoader();
     await _sub?.cancel();
     _sub = null;

@@ -24,4 +24,5 @@ urlpatterns = [
     ),
     path("", include("agents.urls")),
     path("", include("terminals.urls")),
+    path("", include("files.urls")),
 ]

@@ -175,7 +175,7 @@ class TerminalsNotifier extends Notifier<TerminalsState> {
     _client = TerminalClient(
       config: config,
       readHeaders: _headers,
-      onOutput: _appendOutput,
+      onOutputFull: _setOutput,
       onHistory: _applyHistory,
       onAttached: (info) {
         state = state.copyWith(
@@ -203,10 +203,8 @@ class TerminalsNotifier extends Notifier<TerminalsState> {
     }
   }
 
-  void _appendOutput(String chunk) {
-    state = state.copyWith(
-      output: state.output + sanitizeTerminalOutput(chunk),
-    );
+  void _setOutput(String text) {
+    state = state.copyWith(output: sanitizeTerminalOutput(text));
   }
 
   void _applyHistory(List<TerminalIOLine> lines) {
@@ -225,7 +223,7 @@ class TerminalsNotifier extends Notifier<TerminalsState> {
         buffer.write(line.data);
       }
     }
-    state = state.copyWith(output: buffer.toString());
+    state = state.copyWith(output: sanitizeTerminalOutput(buffer.toString()));
   }
 
   void sendInput(String text) {

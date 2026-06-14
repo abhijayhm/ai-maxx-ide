@@ -85,6 +85,9 @@ async def test_terminal_ws_attach(api_key, registered_device, workspace, device_
     assert response["type"] == "attached"
     assert response["shell"] == "powershell"
 
+    response = await communicator.receive_json_from(timeout=5)
+    assert response["type"] == "output_full"
+
     await communicator.disconnect()
 
 
@@ -105,6 +108,9 @@ async def test_terminal_ws_io_persisted(
     response = await communicator.receive_json_from(timeout=5)
     assert response["type"] == "attached"
 
+    response = await communicator.receive_json_from(timeout=5)
+    assert response["type"] == "output_full"
+
     await communicator.send_json_to(
         {"type": "input", "data": base64.b64encode(b"echo test\r\n").decode("ascii")}
     )
@@ -112,7 +118,7 @@ async def test_terminal_ws_io_persisted(
     got_output = False
     for _ in range(20):
         response = await communicator.receive_json_from(timeout=5)
-        if response["type"] == "output" and response.get("data"):
+        if response["type"] == "output_full" and response.get("data"):
             got_output = True
             break
     assert got_output

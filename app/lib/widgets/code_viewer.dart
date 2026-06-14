@@ -83,7 +83,7 @@ class _CodeViewerState extends State<CodeViewer> {
   void initState() {
     super.initState();
     _wrapLines = widget.wrapLines;
-    _fontSize = vscodeEditorFontSize();
+    _fontSize = (vscodeEditorFontSize() - 1).clamp(_minFontSize, _maxFontSize);
     _rebuildLines();
     _searchController.addListener(_onSearchChanged);
   }
@@ -676,7 +676,7 @@ class _ViewerOptionsMenu extends StatelessWidget {
             children: [
               const Icon(Icons.zoom_in, size: 18),
               const SizedBox(width: 8),
-              Text('Zoom in (${fontSize.round()}pt)'),
+              Text('Zoom In'),
             ],
           ),
         ),
@@ -686,7 +686,7 @@ class _ViewerOptionsMenu extends StatelessWidget {
             children: [
               const Icon(Icons.zoom_out, size: 18),
               const SizedBox(width: 8),
-              const Text('Zoom out'),
+              const Text('Zoom Out'),
             ],
           ),
         ),

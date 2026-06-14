@@ -44,17 +44,38 @@ async def test_ide_search_ws(api_key, registered_device, device_hash, workspace,
     started = await communicator.receive_json_from()
     assert started["type"] == "search_started"
 
-    saw_result = False
-    while True:
-        msg = await communicator.receive_json_from()
-        if msg["type"] == "search_complete":
-            break
-        if msg["type"] == "result":
-            saw_result = True
-            assert msg["asset"]
-            assert "line" in msg
-            assert "text" in msg
-    assert saw_result
+    msg = await communicator.receive_json_from()
+    assert msg["type"] == "search_complete"
+    assert msg["count"] >= 1
+    assert any(r.get("asset") for r in msg.get("results", []))
+    await communicator.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_ide_search_ws_spaced_phrase(
+    api_key, registered_device, device_hash, workspace, exposed_root
+):
+    (exposed_root / "phrase.txt").write_text("say hello world today\n", encoding="utf-8")
+    url = _ws_url("ide_search/", api_key, device_hash, workspace.id)
+    communicator = WebsocketCommunicator(application, url)
+    connected, _ = await communicator.connect()
+    assert connected
+
+    await communicator.send_json_to(
+        {
+            "type": "search",
+            "workspace_id": workspace.id,
+            "keyword": "hello world",
+            "match_case": False,
+            "match_exact": False,
+        }
+    )
+    await communicator.receive_json_from()
+    msg = await communicator.receive_json_from()
+    assert msg["type"] == "search_complete"
+    assert msg["count"] == 1
+    assert msg["results"][0]["text"] == "say hello world today"
     await communicator.disconnect()
 
 

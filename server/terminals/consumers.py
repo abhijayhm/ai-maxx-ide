@@ -58,7 +58,8 @@ class TerminalConsumer(AsyncWebsocketConsumer):
         self.device = self.scope.get("device")
         self.workspace = self.scope.get("workspace")
         self.pty = None
-        self._pump_task = None
+        self.terminal = None
+        self._output_buffer = bytearray()
         self.authenticated = self.scope.get("ws_authenticated", False)
 
         if self.authenticated and self.device:
@@ -88,15 +89,7 @@ class TerminalConsumer(AsyncWebsocketConsumer):
             return
 
         if msg_type == "input" and self.pty and self.terminal:
-            raw = content.get("data", "")
-            data = base64.b64decode(raw)
-            await save_terminal_io(
-                self.terminal.id,
-                TerminalIODirection.INPUT,
-                raw,
-            )
-            await asyncio.to_thread(self.pty.write, data)
-            await touch_terminal(self.terminal)
+            await self._handle_input(content)
         elif msg_type == "resize" and self.pty and self.terminal:
             cols = content.get("cols", 80)
             rows = content.get("rows", 24)
@@ -104,6 +97,70 @@ class TerminalConsumer(AsyncWebsocketConsumer):
             self.terminal.cols = cols
             self.terminal.rows = rows
             await touch_terminal(self.terminal)
+
+    async def _handle_input(self, content):
+        raw = content.get("data", "")
+        data = base64.b64decode(raw)
+        await save_terminal_io(
+            self.terminal.id,
+            TerminalIODirection.INPUT,
+            raw,
+        )
+        await asyncio.to_thread(self.pty.write, data)
+        await touch_terminal(self.terminal)
+
+        chunk = await self._collect_output()
+        if chunk:
+            encoded = base64.b64encode(chunk).decode("ascii")
+            await save_terminal_io(
+                self.terminal.id,
+                TerminalIODirection.OUTPUT,
+                encoded,
+            )
+            self._output_buffer.extend(chunk)
+
+        await self._send_output_full()
+        await touch_terminal(self.terminal)
+
+        if self.pty and not self.pty.isalive():
+            await close_terminal(self.terminal)
+            await self.send_json({"type": "exit", "code": 0})
+
+    async def _collect_output(self, *, max_wait: float = 5.0, quiet: float = 0.25) -> bytes:
+        """Read PTY output until the stream is quiet (command finished)."""
+        if not self.pty:
+            return b""
+
+        chunks = bytearray()
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + max_wait
+        quiet_until = None
+
+        while loop.time() < deadline:
+            data = await asyncio.to_thread(self.pty.read, 4096)
+            if data:
+                chunks.extend(data)
+                quiet_until = loop.time() + quiet
+            elif quiet_until is not None and loop.time() >= quiet_until:
+                break
+            else:
+                await asyncio.sleep(0.05)
+
+        return bytes(chunks)
+
+    async def _history_bytes(self) -> bytes:
+        if not self.terminal:
+            return b""
+        history = await list_terminal_io(self.terminal.id)
+        buffer = bytearray()
+        for line in history:
+            if line.direction == TerminalIODirection.OUTPUT and line.data:
+                buffer.extend(base64.b64decode(line.data))
+        return bytes(buffer)
+
+    async def _send_output_full(self):
+        encoded = base64.b64encode(bytes(self._output_buffer)).decode("ascii")
+        await self.send_json({"type": "output_full", "data": encoded})
 
     async def _handle_auth(self, content):
         from django.conf import settings
@@ -139,27 +196,6 @@ class TerminalConsumer(AsyncWebsocketConsumer):
 
         await run_close_stale(device.id, self.workspace.id if self.workspace else None)
         await self._attach()
-
-    async def _replay_history(self):
-        if not self.terminal:
-            return
-        history = await list_terminal_io(self.terminal.id)
-        if not history:
-            return
-        await self.send_json(
-            {
-                "type": "history",
-                "lines": [
-                    {
-                        "id": line.id,
-                        "direction": line.direction,
-                        "data": line.data,
-                        "created_at": line.created_at.isoformat(),
-                    }
-                    for line in history
-                ],
-            }
-        )
 
     async def _attach(self):
         if not self.workspace:
@@ -205,33 +241,13 @@ class TerminalConsumer(AsyncWebsocketConsumer):
                 "status": self.terminal.status,
             }
         )
-        await self._replay_history()
-        self._pump_task = asyncio.create_task(self._pump_output())
 
-    async def _pump_output(self):
-        while self.pty and self.pty.isalive():
-            data = await asyncio.to_thread(self.pty.read, 4096)
-            if data:
-                encoded = base64.b64encode(data).decode("ascii")
-                if self.terminal:
-                    await save_terminal_io(
-                        self.terminal.id,
-                        TerminalIODirection.OUTPUT,
-                        encoded,
-                    )
-                await self.send_json({"type": "output", "data": encoded})
-                if self.terminal:
-                    await touch_terminal(self.terminal)
-            else:
-                await asyncio.sleep(0.05)
-
-        if self.terminal:
-            await close_terminal(self.terminal)
-        await self.send_json({"type": "exit", "code": 0})
+        self._output_buffer = bytearray(await self._history_bytes())
+        self._output_buffer.extend(await self._collect_output(max_wait=1.0))
+        await self._send_output_full()
 
     async def disconnect(self, code):
-        if self._pump_task:
-            self._pump_task.cancel()
+        pass
 
     async def send_json(self, content):
         await self.send(text_data=json.dumps(content))

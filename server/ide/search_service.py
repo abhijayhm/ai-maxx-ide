@@ -41,18 +41,34 @@ def _build_automaton(keyword: str, *, match_case: bool) -> ahocorasick.Automaton
     return automaton
 
 
+def _is_word_char(ch: str) -> bool:
+    return ch.isalnum() or ch == "_"
+
+
+def _whole_word_match(line: str, start_index: int, end_index: int) -> bool:
+    if start_index > 0 and _is_word_char(line[start_index - 1]):
+        return False
+    if end_index < len(line) and _is_word_char(line[end_index]):
+        return False
+    return True
+
+
 def _line_matches(
     line: str,
     automaton: ahocorasick.Automaton,
     *,
     match_case: bool,
+    match_exact: bool = False,
 ) -> list[tuple[int, int]]:
-    """Return (start_index, end_index) pairs for substring matches on one line."""
+    """Return (start_index, end_index) pairs for literal substring matches on one line."""
     haystack = line if match_case else line.casefold()
     hits: list[tuple[int, int]] = []
     for end_index, (_needle, orig_len) in automaton.iter(haystack):
         start_index = end_index - orig_len + 1
-        hits.append((start_index, end_index + 1))
+        end_exclusive = end_index + 1
+        if match_exact and not _whole_word_match(line, start_index, end_exclusive):
+            continue
+        hits.append((start_index, end_exclusive))
     return hits
 
 
@@ -136,7 +152,7 @@ def stream_ide_search(
     *,
     keyword: str,
     match_case: bool = False,
-    match_exact: bool = False,  # noqa: ARG001 — reserved; AC search is always literal
+    match_exact: bool = False,
     files_to_include: list | str | None = None,
     files_to_exclude: list | str | None = None,
 ) -> Iterator[dict]:
@@ -162,6 +178,7 @@ def stream_ide_search(
                 line,
                 automaton,
                 match_case=match_case,
+                match_exact=match_exact,
             ):
                 if file_match_count >= _MAX_MATCHES_PER_FILE:
                     break
