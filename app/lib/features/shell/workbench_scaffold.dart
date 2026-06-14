@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/providers/ide_index_provider.dart';
+import '../../core/providers/watchdog_provider.dart';
 import '../../theme/workbench_colors.dart';
 
 class WorkbenchScaffold extends ConsumerWidget {
@@ -23,6 +24,7 @@ class WorkbenchScaffold extends ConsumerWidget {
     final session = ref.watch(sessionProvider).valueOrNull;
     final isReady = session?.isReady ?? false;
     final index = ref.watch(ideIndexProvider);
+    final wsStatus = ref.watch(watchdogProvider);
     final location = GoRouterState.of(context).matchedLocation;
     final onMenu = location.startsWith('/menu');
     final showShellChrome = !onMenu;
@@ -41,6 +43,10 @@ class WorkbenchScaffold extends ConsumerWidget {
                     : index.loading
                         ? 'Indexing…'
                         : '${index.searchable.length} files',
+                wsStatus: wsStatus,
+                onWsRetry: isReady
+                    ? () => ref.read(watchdogProvider.notifier).retry()
+                    : null,
                 onRefresh: isReady
                     ? () => ref.read(ideIndexProvider.notifier).forceRefresh()
                     : null,
@@ -84,16 +90,22 @@ class _WorkbenchHeader extends StatelessWidget {
   const _WorkbenchHeader({
     required this.onMenuTap,
     required this.indexLabel,
+    required this.wsStatus,
+    this.onWsRetry,
     this.onRefresh,
   });
 
   final VoidCallback onMenuTap;
   final String indexLabel;
+  final WorkbenchWsStatus wsStatus;
+  final VoidCallback? onWsRetry;
   final VoidCallback? onRefresh;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.workbenchColors;
+    final wsActive = wsStatus == WorkbenchWsStatus.active;
+    final wsConnecting = wsStatus == WorkbenchWsStatus.connecting;
 
     return Container(
       height: 44,
@@ -119,6 +131,41 @@ class _WorkbenchHeader extends StatelessWidget {
               ),
             ),
           ),
+          InkWell(
+            onTap: wsActive ? null : onWsRetry,
+            borderRadius: BorderRadius.circular(4),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: wsActive
+                          ? colors.statusSuccess
+                          : colors.statusError,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    wsConnecting
+                        ? 'Connecting…'
+                        : wsActive
+                            ? 'Active'
+                            : 'Inactive',
+                    style: TextStyle(
+                      color: wsActive ? colors.fgMuted : colors.statusError,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           Text(
             indexLabel,
             style: TextStyle(color: colors.fgMuted, fontSize: 11),

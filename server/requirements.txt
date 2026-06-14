@@ -21,5 +21,5 @@ av>=12.0,<14
 numpy>=1.26,<3
 pynput>=1.7,<2
 
-# Windows interactive terminals (falls back to subprocess pipes if missing)
-pywinpty>=2.0,<3
+# Windows interactive terminals (required on win32 — ConPTY via pywinpty)
+pywinpty>=2.0

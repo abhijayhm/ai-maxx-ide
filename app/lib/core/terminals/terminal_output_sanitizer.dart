@@ -11,8 +11,14 @@ String sanitizeTerminalOutput(String raw) {
   text = text.replaceAll(RegExp(r'\x1B[>=]'), '');
   // BEL / backspace artifacts sometimes shown as replacement chars.
   text = text.replaceAll('\x07', '');
+  text = text.replaceAll('\x00', '');
   // Normalize Windows line endings.
   text = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
 
   return text;
+}
+
+/// Decode raw PTY bytes (Windows consoles are often CP437/OEM — latin1 is 1:1).
+String decodeTerminalBytes(List<int> bytes) {
+  return sanitizeTerminalOutput(String.fromCharCodes(bytes));
 }

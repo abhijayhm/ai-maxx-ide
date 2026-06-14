@@ -21,6 +21,13 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen> {
   _RemoteTab _tab = _RemoteTab.trackpad;
   final _keyboardController = RemoteKeyboardController();
 
+  /// Fraction of split area given to the video pane (default 50:50).
+  double _topFraction = 0.5;
+
+  static const _dividerHeight = 8.0;
+  static const _minFraction = 0.2;
+  static const _maxFraction = 0.8;
+
   @override
   void initState() {
     super.initState();
@@ -35,6 +42,16 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen> {
     super.dispose();
   }
 
+  void _onSplitDrag(double deltaDy, double splitAreaHeight) {
+    if (splitAreaHeight <= 0) {
+      return;
+    }
+    setState(() {
+      _topFraction = (_topFraction + deltaDy / splitAreaHeight)
+          .clamp(_minFraction, _maxFraction);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.workbenchColors;
@@ -43,82 +60,131 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen> {
 
     return ColoredBox(
       color: colors.canvas,
-      child: Column(
-        children: [
-          Expanded(
-            flex: 2,
-            child: _VideoPane(
-              colors: colors,
-              loading: remote.isLoading,
-              connecting: remote.connecting,
-              connected: remote.connected,
-              videoReady: remote.videoReady,
-              error: remote.error,
-              renderer: client?.webrtc.renderer,
-              onPointerMove: (x, y) =>
-                  ref.read(remoteProvider.notifier).pointerMove(x, y),
-              onClick: () => ref.read(remoteProvider.notifier).click(),
-              onReconnect: () => ref.read(remoteProvider.notifier).connect(),
-            ),
-          ),
-          if (remote.stagedCount > 0)
-            _StagingBar(
-              count: remote.stagedCount,
-              onDispatch: () => ref.read(remoteProvider.notifier).dispatchStaging(),
-              onClear: () => ref.read(remoteProvider.notifier).clearStaging(),
-            ),
-          Expanded(
-            flex: 3,
-            child: Column(
-              children: [
-                Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stagingHeight = remote.stagedCount > 0 ? 44.0 : 0.0;
+          final splitAreaHeight =
+              constraints.maxHeight - _dividerHeight - stagingHeight;
+          final topHeight = splitAreaHeight * _topFraction;
+          final bottomHeight = splitAreaHeight - topHeight;
+
+          return Column(
+            children: [
+              SizedBox(
+                height: topHeight,
+                child: _VideoPane(
+                  colors: colors,
+                  loading: remote.isLoading,
+                  connecting: remote.connecting,
+                  connected: remote.connected,
+                  videoReady: remote.videoReady,
+                  error: remote.error,
+                  renderer: client?.webrtc.renderer,
+                  onReconnect: () => ref.read(remoteProvider.notifier).connect(),
+                ),
+              ),
+              _SplitDivider(
+                colors: colors,
+                onDrag: (dy) => _onSplitDrag(dy, splitAreaHeight),
+              ),
+              if (remote.stagedCount > 0)
+                _StagingBar(
+                  count: remote.stagedCount,
+                  onDispatch: () =>
+                      ref.read(remoteProvider.notifier).dispatchStaging(),
+                  onClear: () =>
+                      ref.read(remoteProvider.notifier).clearStaging(),
+                ),
+              SizedBox(
+                height: bottomHeight,
+                child: Column(
                   children: [
-                    _RemoteTabButton(
-                      label: 'Trackpad',
-                      selected: _tab == _RemoteTab.trackpad,
-                      onTap: () => setState(() => _tab = _RemoteTab.trackpad),
+                    Row(
+                      children: [
+                        _RemoteTabButton(
+                          label: 'Trackpad',
+                          selected: _tab == _RemoteTab.trackpad,
+                          onTap: () =>
+                              setState(() => _tab = _RemoteTab.trackpad),
+                        ),
+                        _RemoteTabButton(
+                          label: 'Keyboard',
+                          selected: _tab == _RemoteTab.keyboard,
+                          onTap: () =>
+                              setState(() => _tab = _RemoteTab.keyboard),
+                        ),
+                      ],
                     ),
-                    _RemoteTabButton(
-                      label: 'Keyboard',
-                      selected: _tab == _RemoteTab.keyboard,
-                      onTap: () => setState(() => _tab = _RemoteTab.keyboard),
+                    Expanded(
+                      child: _tab == _RemoteTab.trackpad
+                          ? _TrackpadPanel(
+                              colors: colors,
+                              enabled: remote.connected,
+                              sensitivity: remote.trackpadSensitivity,
+                              onSensitivityChanged: (value) => ref
+                                  .read(remoteProvider.notifier)
+                                  .setTrackpadSensitivity(value),
+                              onSwipeDelta: (dx, dy) => ref
+                                  .read(remoteProvider.notifier)
+                                  .pointerDelta(dx, dy),
+                              onClick: () => ref
+                                  .read(remoteProvider.notifier)
+                                  .click(button: 'left'),
+                              onRightClick: () => ref
+                                  .read(remoteProvider.notifier)
+                                  .click(button: 'right'),
+                            )
+                          : RemoteKeyboard(
+                              controller: _keyboardController,
+                              onCommit: (keys, modifiers) => ref
+                                  .read(remoteProvider.notifier)
+                                  .commitKeys(keys, modifiers),
+                            ),
                     ),
                   ],
                 ),
-                Expanded(
-                  child: _tab == _RemoteTab.trackpad
-                      ? _TrackpadPanel(
-                          colors: colors,
-                          enabled: remote.connected,
-                          sensitivity: remote.trackpadSensitivity,
-                          onSensitivityChanged: (value) => ref
-                              .read(remoteProvider.notifier)
-                              .setTrackpadSensitivity(value),
-                          onSwipeDelta: (dx, dy) => ref
-                              .read(remoteProvider.notifier)
-                              .pointerDelta(dx, dy),
-                          onClick: () =>
-                              ref.read(remoteProvider.notifier).click(button: 'left'),
-                          onRightClick: () =>
-                              ref.read(remoteProvider.notifier).click(button: 'right'),
-                        )
-                      : RemoteKeyboard(
-                          controller: _keyboardController,
-                          onCommit: (keys, modifiers) => ref
-                              .read(remoteProvider.notifier)
-                              .commitKeys(keys, modifiers),
-                        ),
-                ),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-class _VideoPane extends StatelessWidget {
+class _SplitDivider extends StatelessWidget {
+  const _SplitDivider({
+    required this.colors,
+    required this.onDrag,
+  });
+
+  final WorkbenchColors colors;
+  final ValueChanged<double> onDrag;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragUpdate: (details) => onDrag(details.delta.dy),
+      child: Container(
+        height: _RemoteScreenState._dividerHeight,
+        color: colors.chrome,
+        child: Center(
+          child: Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: colors.fgInactive,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VideoPane extends StatefulWidget {
   const _VideoPane({
     required this.colors,
     required this.loading,
@@ -127,8 +193,6 @@ class _VideoPane extends StatelessWidget {
     required this.videoReady,
     required this.error,
     required this.renderer,
-    required this.onPointerMove,
-    required this.onClick,
     required this.onReconnect,
   });
 
@@ -139,106 +203,139 @@ class _VideoPane extends StatelessWidget {
   final bool videoReady;
   final String? error;
   final RTCVideoRenderer? renderer;
-  final void Function(double x, double y) onPointerMove;
-  final VoidCallback onClick;
   final VoidCallback onReconnect;
 
   @override
+  State<_VideoPane> createState() => _VideoPaneState();
+}
+
+class _VideoPaneState extends State<_VideoPane> {
+  final _transformController = TransformationController();
+
+  @override
+  void dispose() {
+    _transformController.dispose();
+    super.dispose();
+  }
+
+  void _resetZoom() {
+    _transformController.value = Matrix4.identity();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final hasVideo = widget.videoReady &&
+        widget.renderer != null &&
+        widget.renderer!.srcObject != null;
+
     return ColoredBox(
       color: const Color(0xFF0F0F0F),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final hasVideo =
-              videoReady && renderer != null && renderer!.srcObject != null;
-
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              if (hasVideo)
-                GestureDetector(
-                  onPanUpdate: (details) {
-                    final x = (details.localPosition.dx / constraints.maxWidth)
-                        .clamp(0.0, 1.0);
-                    final y = (details.localPosition.dy / constraints.maxHeight)
-                        .clamp(0.0, 1.0);
-                    onPointerMove(x, y);
-                  },
-                  onTap: onClick,
-                  child: RTCVideoView(
-                    renderer!,
-                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
-                  ),
-                )
-              else
-                Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.desktop_windows_outlined,
-                        size: 48,
-                        color: colors.fgInactive,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        connecting
-                            ? 'Connecting remote desktop…'
-                            : connected && !videoReady
-                                ? 'Waiting for video stream…'
-                                : 'Remote desktop',
-                        style: TextStyle(color: colors.fgMuted, fontSize: 13),
-                      ),
-                      if (error != null) ...[
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Text(
-                            error!,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: colors.statusError,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (!loading) ...[
-                        const SizedBox(height: 12),
-                        TextButton(
-                          onPressed: onReconnect,
-                          child: const Text('Reconnect'),
-                        ),
-                      ],
-                    ],
-                  ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (hasVideo)
+            InteractiveViewer(
+              transformationController: _transformController,
+              minScale: 1.0,
+              maxScale: 5.0,
+              panEnabled: true,
+              scaleEnabled: true,
+              child: Center(
+                child: RTCVideoView(
+                  widget.renderer!,
+                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
                 ),
-              if (loading)
-                ColoredBox(
-                  color: Colors.black.withValues(alpha: 0.55),
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(
-                          width: 32,
-                          height: 32,
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            )
+          else
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.desktop_windows_outlined,
+                    size: 48,
+                    color: widget.colors.fgInactive,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    widget.connecting
+                        ? 'Connecting remote desktop…'
+                        : widget.connected && !widget.videoReady
+                            ? 'Waiting for video stream…'
+                            : 'Remote desktop',
+                    style: TextStyle(color: widget.colors.fgMuted, fontSize: 13),
+                  ),
+                  if (widget.error != null) ...[
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        widget.error!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: widget.colors.statusError,
+                          fontSize: 12,
                         ),
-                        const SizedBox(height: 14),
-                        Text(
-                          connecting
-                              ? 'Connecting remote desktop…'
-                              : 'Starting video stream…',
-                          style: TextStyle(color: colors.fgDefault, fontSize: 13),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
+                  if (!widget.loading) ...[
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: widget.onReconnect,
+                      child: const Text('Reconnect'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          if (hasVideo)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                onPressed: _resetZoom,
+                icon: Icon(
+                  Icons.fit_screen,
+                  size: 20,
+                  color: widget.colors.fgMuted,
                 ),
-            ],
-          );
-        },
+                tooltip: 'Reset zoom',
+                style: IconButton.styleFrom(
+                  backgroundColor: widget.colors.chrome.withValues(alpha: 0.9),
+                  minimumSize: const Size(32, 32),
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+          if (widget.loading)
+            ColoredBox(
+              color: Colors.black.withValues(alpha: 0.55),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      widget.connecting
+                          ? 'Connecting remote desktop…'
+                          : 'Starting video stream…',
+                      style: TextStyle(
+                        color: widget.colors.fgDefault,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

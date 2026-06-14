@@ -8,32 +8,51 @@ import '../ws/ws_client.dart';
 import 'app_providers.dart';
 import 'ide_index_provider.dart';
 
-final watchdogProvider =
-    NotifierProvider<WatchdogNotifier, bool>(WatchdogNotifier.new);
+enum WorkbenchWsStatus { disconnected, connecting, active }
 
-class WatchdogNotifier extends Notifier<bool> {
+final watchdogProvider =
+    NotifierProvider<WatchdogNotifier, WorkbenchWsStatus>(WatchdogNotifier.new);
+
+class WatchdogNotifier extends Notifier<WorkbenchWsStatus> {
   WsClient? _ws;
   StreamSubscription<Map<String, dynamic>>? _sub;
 
   @override
-  bool build() {
-    ref.onDispose(_disconnect);
-    return false;
+  WorkbenchWsStatus build() {
+    ref.onDispose(() => _disconnect(silent: true));
+    ref.listen(sessionProvider, (previous, next) {
+      final wasReady = previous?.valueOrNull?.isReady ?? false;
+      final isReady = next.valueOrNull?.isReady ?? false;
+      if (!wasReady && isReady) {
+        Future.microtask(connect);
+      } else if (wasReady && !isReady) {
+        Future.microtask(disconnect);
+      }
+    });
+    return WorkbenchWsStatus.disconnected;
   }
 
   Future<void> connect({SessionSnapshot? session}) async {
-    if (state) {
+    if (state == WorkbenchWsStatus.active ||
+        state == WorkbenchWsStatus.connecting) {
       return;
     }
+
     final snapshot = session ?? ref.read(sessionProvider).valueOrNull;
     if (snapshot == null || !snapshot.isAuthenticated) {
+      state = WorkbenchWsStatus.disconnected;
       return;
     }
+
+    state = WorkbenchWsStatus.connecting;
 
     final config = ref.read(appConfigProvider);
     config.serverUrl = AppConfig.normalizeServerUrl(snapshot.serverUrl);
     config.apiKey = snapshot.apiKey;
 
+    await _sub?.cancel();
+    _sub = null;
+    await _ws?.disconnect();
     _ws = WsClient(
       config: config,
       readHeaders: () => (
@@ -44,12 +63,25 @@ class WatchdogNotifier extends Notifier<bool> {
     );
 
     _sub = _ws!.messages.listen(_onMessage);
-    await _ws!.connect('watchdog/');
-    state = _ws!.isConnected;
+    try {
+      await _ws!.connect('watchdog/');
+      state =
+          _ws!.isConnected ? WorkbenchWsStatus.active : WorkbenchWsStatus.disconnected;
+    } catch (_) {
+      state = WorkbenchWsStatus.disconnected;
+      await _disconnect(silent: true);
+    }
   }
 
   void _onMessage(Map<String, dynamic> frame) {
-    if (frame['type'] != 'watchdog') {
+    final type = frame['type'] as String? ?? '';
+    if (type == 'connection_closed' || type == 'connection_error') {
+      state = WorkbenchWsStatus.disconnected;
+      unawaited(_disconnect(silent: true));
+      return;
+    }
+
+    if (type != 'watchdog') {
       return;
     }
     final event = frame['event'] as String? ?? '';
@@ -63,14 +95,22 @@ class WatchdogNotifier extends Notifier<bool> {
   }
 
   Future<void> disconnect() async {
-    await _disconnect();
+    await _disconnect(silent: true);
+    state = WorkbenchWsStatus.disconnected;
   }
 
-  Future<void> _disconnect() async {
+  Future<void> retry() async {
+    await _disconnect(silent: true);
+    await connect();
+  }
+
+  Future<void> _disconnect({bool silent = false}) async {
     await _sub?.cancel();
     _sub = null;
     await _ws?.disconnect();
     _ws = null;
-    state = false;
+    if (!silent) {
+      state = WorkbenchWsStatus.disconnected;
+    }
   }
 }

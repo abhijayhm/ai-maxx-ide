@@ -88,3 +88,51 @@ class TerminalIOLine {
     );
   }
 }
+
+/// One rendered unit in the terminal transcript.
+sealed class TerminalBlock {
+  const TerminalBlock();
+}
+
+/// Shell banner / prompt history from before the first command.
+class TerminalBannerBlock extends TerminalBlock {
+  const TerminalBannerBlock(this.text);
+
+  final String text;
+
+  TerminalBannerBlock copyWith({String? text}) =>
+      TerminalBannerBlock(text ?? this.text);
+}
+
+/// A command the user sent and the shell output for that batch.
+class TerminalExchangeBlock extends TerminalBlock {
+  const TerminalExchangeBlock({
+    required this.input,
+    this.rawOutput = '',
+    this.output = '',
+    this.running = false,
+    this.isError = false,
+  });
+
+  final String input;
+  final String rawOutput;
+  final String output;
+  final bool running;
+  final bool isError;
+
+  TerminalExchangeBlock copyWith({
+    String? input,
+    String? rawOutput,
+    String? output,
+    bool? running,
+    bool? isError,
+  }) {
+    return TerminalExchangeBlock(
+      input: input ?? this.input,
+      rawOutput: rawOutput ?? this.rawOutput,
+      output: output ?? this.output,
+      running: running ?? this.running,
+      isError: isError ?? this.isError,
+    );
+  }
+}

@@ -1,12 +1,20 @@
-"""PTY manager with FakePty for tests and subprocess fallback."""
+"""Windows interactive shells via pywinpty (ConPTY); FakePty for tests."""
+
+from __future__ import annotations
 
 import asyncio
-import base64
 import os
-import subprocess
+import sys
 import threading
 import time
 from typing import Protocol
+
+_PYWINPTY_IMPORT_ERROR: Exception | None = None
+try:
+    from winpty import PtyProcess as _PtyProcess
+except ImportError as exc:
+    _PtyProcess = None
+    _PYWINPTY_IMPORT_ERROR = exc
 
 
 class PtyProtocol(Protocol):
@@ -19,11 +27,33 @@ class PtyProtocol(Protocol):
     def kill(self) -> None: ...
 
 
+def shell_argv(shell: str) -> list[str]:
+    """Executable + args for an interactive shell session."""
+    key = shell.lower()
+    if key == "cmd":
+        return ["cmd.exe"]
+    if key in ("powershell", "pwsh"):
+        return ["powershell.exe", "-NoLogo", "-NoProfile"]
+    if shell.endswith((".exe", ".cmd", ".bat")):
+        return [shell]
+    return [f"{shell}.exe"]
+
+
+def _require_pywinpty() -> type:
+    if _PtyProcess is None:
+        raise RuntimeError(
+            "pywinpty is required for interactive terminals on Windows. "
+            "Install server dependencies: pip install -r server/requirements.txt "
+            f"(import error: {_PYWINPTY_IMPORT_ERROR})"
+        ) from _PYWINPTY_IMPORT_ERROR
+    return _PtyProcess
+
+
 class FakePty:
     """In-memory PTY for tests."""
 
     _counter = 1000
-    _instances: dict[int, "FakePty"] = {}
+    _instances: dict[int, FakePty] = {}
 
     def __init__(self, shell: str, cwd: str, cols: int, rows: int):
         FakePty._counter += 1
@@ -40,7 +70,10 @@ class FakePty:
     def write(self, data: bytes) -> None:
         text = data.decode("utf-8", errors="replace")
         self._out_buffer.extend(data)
-        if text.strip() == "exit":
+        stripped = text.strip()
+        if stripped.lower().startswith("echo "):
+            self._out_buffer.extend(f"{stripped[5:].strip()}\r\n".encode())
+        if stripped == "exit":
             self._alive = False
 
     def read(self, size: int = 4096) -> bytes:
@@ -64,36 +97,46 @@ class FakePty:
         FakePty._instances.pop(self.pid, None)
 
 
-class SubprocessPty:
-    """Subprocess pipe fallback with a background reader (non-blocking reads)."""
+class PywinptySession:
+    """Background-drained pywinpty session — non-blocking reads for the WS pump."""
 
-    def __init__(self, proc: subprocess.Popen, pid: int):
+    def __init__(self, proc, *, shell: str, cwd: str):
         self._proc = proc
-        self.pid = pid
+        self.shell = shell
+        self.cwd = cwd
+        self.pid = proc.pid
         self._buffer = bytearray()
         self._lock = threading.Lock()
         self._alive = True
-        self._reader = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader = threading.Thread(target=self._read_loop, name=f"pywinpty-{self.pid}", daemon=True)
         self._reader.start()
 
     def _read_loop(self) -> None:
-        stdout = self._proc.stdout
-        while self._alive and self._proc.poll() is None and stdout is not None:
+        while self._alive and self._proc.isalive():
             try:
-                chunk = stdout.read(4096)
-            except (OSError, ValueError):
+                chunk = self._proc.read(4096)
+            except EOFError:
                 break
-            if chunk:
-                with self._lock:
-                    self._buffer.extend(chunk)
-            else:
-                time.sleep(0.05)
+            except Exception:
+                break
+            if not chunk:
+                time.sleep(0.02)
+                continue
+            data = chunk if isinstance(chunk, bytes) else str(chunk).encode("utf-8", errors="replace")
+            with self._lock:
+                self._buffer.extend(data)
+
         self._alive = False
 
     def write(self, data: bytes) -> None:
-        if self._proc.stdin:
-            self._proc.stdin.write(data)
-            self._proc.stdin.flush()
+        if not self._alive:
+            raise RuntimeError("Pty is closed")
+        text = data.decode("utf-8", errors="replace")
+        try:
+            self._proc.write(text)
+        except EOFError as exc:
+            self._alive = False
+            raise RuntimeError("Pty is closed") from exc
 
     def read(self, size: int = 4096) -> bytes:
         with self._lock:
@@ -104,18 +147,16 @@ class SubprocessPty:
         return b""
 
     def set_size(self, cols: int, rows: int) -> None:
-        pass
+        if hasattr(self._proc, "setwinsize"):
+            self._proc.setwinsize(rows, cols)
 
     def isalive(self) -> bool:
-        return self._alive and self._proc.poll() is None
+        return self._alive and self._proc.isalive()
 
     def kill(self) -> None:
         self._alive = False
-        self._proc.kill()
-        try:
-            self._proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            pass
+        if self._proc.isalive():
+            self._proc.terminate(force=True)
 
 
 class PtyManager:
@@ -127,45 +168,24 @@ class PtyManager:
 
     @classmethod
     async def spawn(cls, shell: str, cwd: str, cols: int, rows: int) -> PtyProtocol:
-        return await asyncio.to_thread(cls._spawn_sync, shell, cwd, cols, rows)
+        return await asyncio.to_thread(cls.spawn_sync, shell, cwd, cols, rows)
 
     @classmethod
-    def _spawn_sync(cls, shell: str, cwd: str, cols: int, rows: int) -> PtyProtocol:
+    def spawn_sync(cls, shell: str, cwd: str, cols: int, rows: int) -> PtyProtocol:
         if cls._use_fake():
             pty = FakePty(shell, cwd, cols, rows)
             cls._active[pty.pid] = pty
             return pty
 
-        try:
-            import winpty  # type: ignore
-
-            proc = winpty.PtyProcess.spawn(
-                f"{shell}.exe" if shell in ("powershell", "cmd") else shell,
-                cwd=cwd,
-                dimensions=(rows, cols),
+        if sys.platform != "win32":
+            raise RuntimeError(
+                "Interactive terminals are only supported on Windows in this build."
             )
-            pty = _WinPtyWrapper(proc)
-            cls._active[pty.pid] = pty
-            return pty
-        except ImportError:
-            pass
 
-        if shell == "powershell":
-            cmd = ["powershell.exe", "-NoLogo", "-NoProfile"]
-        elif shell == "cmd":
-            cmd = ["cmd.exe"]
-        else:
-            cmd = [shell]
-
-        proc = subprocess.Popen(
-            cmd,
-            cwd=cwd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=False,
-        )
-        pty = SubprocessPty(proc, proc.pid)
+        PtyProcess = _require_pywinpty()
+        argv = shell_argv(shell)
+        proc = PtyProcess.spawn(argv, cwd=cwd, dimensions=(rows, cols))
+        pty = PywinptySession(proc, shell=shell, cwd=cwd)
         cls._active[pty.pid] = pty
         return pty
 
@@ -184,31 +204,50 @@ class PtyManager:
             pty.kill()
         FakePty._instances.pop(pid, None)
 
+    @classmethod
+    async def run_batch(
+        cls,
+        *,
+        shell: str,
+        cwd: str,
+        cols: int,
+        rows: int,
+        data: bytes,
+        max_wait: float = 30.0,
+        quiet: float = 0.25,
+    ) -> bytes:
+        """Spawn a shell, write one payload, read until quiet, then tear down."""
 
-class _WinPtyWrapper:
-    def __init__(self, proc):
-        self._proc = proc
-        self.pid = proc.pid if hasattr(proc, "pid") else os.getpid()
+        def _run() -> bytes:
+            pty = cls.spawn_sync(shell, cwd, cols, rows)
+            try:
+                line_end = b"\r\n" if shell.lower() in ("cmd", "powershell", "pwsh") else b"\n"
+                payload = data if data.endswith((b"\n", b"\r\n")) else data + line_end
+                pty.write(payload)
+                return cls._collect_output_sync(pty, max_wait=max_wait, quiet=quiet)
+            finally:
+                cls.kill(pty.pid)
 
-    def write(self, data: bytes) -> None:
-        self._proc.write(data.decode("utf-8", errors="replace"))
+        return await asyncio.to_thread(_run)
 
-    def read(self, size: int = 4096) -> bytes:
-        try:
-            data = self._proc.read(size)
-        except EOFError:
-            return b""
-        if isinstance(data, bytes):
-            return data
-        return str(data).encode("utf-8", errors="replace")
-
-    def set_size(self, cols: int, rows: int) -> None:
-        if hasattr(self._proc, "setwinsize"):
-            self._proc.setwinsize(rows, cols)
-
-    def isalive(self) -> bool:
-        return self._proc.isalive()
-
-    def kill(self) -> None:
-        if self._proc.isalive():
-            self._proc.terminate()
+    @classmethod
+    def _collect_output_sync(
+        cls,
+        pty: PtyProtocol,
+        *,
+        max_wait: float = 30.0,
+        quiet: float = 0.25,
+    ) -> bytes:
+        chunks = bytearray()
+        deadline = time.monotonic() + max_wait
+        quiet_until = None
+        while time.monotonic() < deadline:
+            data = pty.read(4096)
+            if data:
+                chunks.extend(data)
+                quiet_until = time.monotonic() + quiet
+            elif quiet_until is not None and time.monotonic() >= quiet_until:
+                break
+            else:
+                time.sleep(0.05)
+        return bytes(chunks)

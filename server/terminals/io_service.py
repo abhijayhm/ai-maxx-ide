@@ -5,8 +5,7 @@ from channels.db import database_sync_to_async
 from terminals.models import Terminal, TerminalIO, TerminalIODirection
 
 
-@database_sync_to_async
-def save_terminal_io(terminal_id: int, direction: str, data_b64: str) -> TerminalIO:
+def _save_terminal_io(terminal_id: int, direction: str, data_b64: str) -> TerminalIO:
     return TerminalIO.objects.create(
         terminal_id=terminal_id,
         direction=direction,
@@ -14,13 +13,17 @@ def save_terminal_io(terminal_id: int, direction: str, data_b64: str) -> Termina
     )
 
 
-@database_sync_to_async
-def list_terminal_io(terminal_id: int, *, limit: int = 500, offset: int = 0):
+save_terminal_io = database_sync_to_async(_save_terminal_io, thread_sensitive=False)
+
+
+def _list_terminal_io(terminal_id: int, *, limit: int = 500, offset: int = 0):
     return list(
         TerminalIO.objects.filter(terminal_id=terminal_id)
         .order_by("created_at")[offset : offset + limit]
     )
 
+
+list_terminal_io = database_sync_to_async(_list_terminal_io, thread_sensitive=False)
 
 @database_sync_to_async
 def replay_output_text(terminal_id: int) -> str:

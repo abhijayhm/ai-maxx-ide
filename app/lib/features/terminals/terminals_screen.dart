@@ -6,6 +6,16 @@ import '../../core/terminals/terminal_models.dart';
 import '../../theme/workbench_colors.dart';
 import '../../theme/workbench_theme.dart';
 
+/// Classic terminal colours (near-black canvas, light monospace text).
+const _terminalBg = Color(0xFF0C0C0C);
+const _terminalFg = Color(0xFFCCCCCC);
+
+/// Windows shells exposed when creating a terminal session.
+const _shellOptions = [
+  (id: 'cmd', label: 'Command Prompt (cmd)'),
+  (id: 'powershell', label: 'PowerShell'),
+];
+
 class TerminalsScreen extends ConsumerStatefulWidget {
   const TerminalsScreen({super.key});
 
@@ -47,20 +57,94 @@ class _TerminalsScreenState extends ConsumerState<TerminalsScreen> {
     });
   }
 
+  void _ensureInputFocused() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !ref.read(terminalsProvider).attached) {
+        return;
+      }
+      _inputFocus.requestFocus();
+    });
+  }
+
   void _submitCommand() {
     final state = ref.read(terminalsProvider);
-    if (!state.attached) {
+    if (!state.attached || state.executing) {
       return;
     }
-    final line = _inputController.text;
-    final notifier = ref.read(terminalsProvider.notifier);
-    if (line.isEmpty) {
-      notifier.sendInput('\n');
-    } else {
-      notifier.sendInput('$line\n');
+    final text = _inputController.text;
+    if (text.trim().isEmpty) {
+      return;
     }
+    ref.read(terminalsProvider.notifier).sendInput(text);
     _inputController.clear();
-    _inputFocus.requestFocus();
+    _ensureInputFocused();
+  }
+
+  Future<void> _promptCreateTerminal() async {
+    var selected = _shellOptions.first.id;
+
+    final shell = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final colors = context.workbenchColors;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: colors.elevated,
+              title: Text(
+                'New terminal',
+                style: TextStyle(color: colors.fgStrong, fontSize: 16),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final option in _shellOptions)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        selected == option.id
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        color: selected == option.id
+                            ? colors.accentPrimary
+                            : colors.fgMuted,
+                        size: 22,
+                      ),
+                      title: Text(
+                        option.label,
+                        style: TextStyle(
+                          color: colors.fgDefault,
+                          fontSize: 14,
+                        ),
+                      ),
+                      onTap: () => setDialogState(() => selected = option.id),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text('Cancel', style: TextStyle(color: colors.fgMuted)),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(selected),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: colors.accentPrimary,
+                  ),
+                  child: const Text('Create'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (shell == null || !mounted) {
+      return;
+    }
+    await ref.read(terminalsProvider.notifier).createSession(shell: shell);
   }
 
   @override
@@ -68,22 +152,35 @@ class _TerminalsScreenState extends ConsumerState<TerminalsScreen> {
     final colors = context.workbenchColors;
     final state = ref.watch(terminalsProvider);
     final active = state.activeSession;
+    final transcript = state.transcript;
 
-    ref.listen(terminalsProvider.select((s) => s.output), (prev, next) {
-      if (next != prev) {
-        _scrollToEnd();
-      }
-    });
+    ref.listen(
+      terminalsProvider.select((s) => s.transcript.length + (s.executing ? 1 : 0)),
+      (prev, next) {
+        if (next != prev) {
+          _scrollToEnd();
+        }
+      },
+    );
+
+    ref.listen(
+      terminalsProvider.select((s) => s.executing),
+      (prev, next) {
+        if (prev == true && next == false) {
+          _ensureInputFocused();
+        }
+      },
+    );
 
     return ColoredBox(
-      color: colors.canvas,
+      color: colors.chrome,
       child: Column(
         children: [
           _SessionBar(
             sessions: state.sessions,
             activeId: state.activeId,
             attached: state.attached,
-            onCreate: () => ref.read(terminalsProvider.notifier).createSession(),
+            onCreate: _promptCreateTerminal,
             onSelect: (id) => ref.read(terminalsProvider.notifier).selectSession(id),
             onClose: (id) => ref.read(terminalsProvider.notifier).closeSession(id),
           ),
@@ -97,25 +194,34 @@ class _TerminalsScreenState extends ConsumerState<TerminalsScreen> {
             ),
           Expanded(
             child: ColoredBox(
-              color: const Color(0xFF0F0F0F),
-              child: SingleChildScrollView(
-                controller: _scrollController,
-                padding: const EdgeInsets.all(12),
-                child: SelectableText(
-                  state.output.isEmpty
-                      ? (state.loading
-                          ? 'Loading terminal…'
-                          : 'Terminal output will appear here…')
-                      : state.output,
-                  style: workbenchMonoStyle(
-                    context,
-                    size: 13,
-                    color: state.output.isEmpty
-                        ? colors.fgMuted
-                        : colors.fgDefault,
-                  ),
-                ),
-              ),
+              color: _terminalBg,
+              child: transcript.isEmpty
+                  ? Center(
+                      child: Text(
+                        state.loading
+                            ? 'Loading terminal…'
+                            : state.attached
+                                ? 'Ready.'
+                                : 'Connect a terminal to begin.',
+                        style: workbenchMonoStyle(
+                          context,
+                          size: 13,
+                          color: colors.fgMuted,
+                        ),
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                      child: SelectableText(
+                        state.executing ? '$transcript▌' : transcript,
+                        style: workbenchMonoStyle(
+                          context,
+                          size: 13,
+                          color: _terminalFg,
+                        ),
+                      ),
+                    ),
             ),
           ),
           Container(
@@ -139,11 +245,22 @@ class _TerminalsScreenState extends ConsumerState<TerminalsScreen> {
                   child: Text(
                     active == null
                         ? 'No terminal'
-                        : '${active.name} · ${state.shell ?? active.shell}',
+                        : state.executing
+                            ? '${active.name} · running…'
+                            : '${active.name} · ${state.shell ?? active.shell}${state.pid != null ? ' · pid ${state.pid}' : ''}',
                     style: TextStyle(color: colors.fgMuted, fontSize: 11),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (state.executing)
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colors.accentPrimary,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -157,11 +274,14 @@ class _TerminalsScreenState extends ConsumerState<TerminalsScreen> {
                     controller: _inputController,
                     focusNode: _inputFocus,
                     enabled: state.attached,
-                    maxLines: 1,
+                    readOnly: state.executing,
+                    minLines: 1,
+                    maxLines: 4,
+                    keyboardType: TextInputType.multiline,
                     style: workbenchMonoStyle(context, size: 13),
                     decoration: InputDecoration(
                       hintText: state.attached
-                          ? 'Type a command, tap ✓ to send'
+                          ? 'Command… (tap ✓ to run)'
                           : 'Connect a terminal to type…',
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(
@@ -180,11 +300,13 @@ class _TerminalsScreenState extends ConsumerState<TerminalsScreen> {
                       ),
                     ),
                     textInputAction: TextInputAction.none,
+                    onSubmitted: (_) => _submitCommand(),
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  onPressed: state.attached ? _submitCommand : null,
+                  onPressed:
+                      state.attached && !state.executing ? _submitCommand : null,
                   icon: const Icon(Icons.check, size: 22),
                   color: colors.accentPrimary,
                   tooltip: 'Send command',

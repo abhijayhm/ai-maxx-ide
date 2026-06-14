@@ -12,6 +12,7 @@ from core.permissions import IsRegisteredDevice, RequiresWorkspace, get_workspac
 from core.utils.paths import PathNotAllowedError, resolve_allowed_path
 from terminals.models import Terminal, TerminalIO, TerminalStatus
 from terminals.pty_manager import PtyManager
+from terminals.shell_defaults import default_terminal_shell
 from terminals.serializers import TerminalIOSerializer
 from terminals.services import close_stale_terminals
 
@@ -46,7 +47,7 @@ def terminal_list_create_view(request):
             qs = qs.filter(status=TerminalStatus.ACTIVE)
         return Response([_serialize_terminal(t) for t in qs.order_by("-created_at")])
 
-    shell = request.data.get("shell", "powershell")
+    shell = request.data.get("shell") or default_terminal_shell()
     cwd = request.data.get("cwd", workspace.absolute_path)
     cols = int(request.data.get("cols", 80))
     rows = int(request.data.get("rows", 24))
@@ -142,9 +143,11 @@ def terminal_exec_view(request, terminal_id):
         return error_response("path_not_allowed", exc.detail, status.HTTP_403_FORBIDDEN)
 
     if terminal.shell == "powershell":
-        cmd = ["powershell", "-NoProfile", "-Command", command]
-    else:
+        cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command", command]
+    elif terminal.shell == "cmd":
         cmd = ["cmd", "/c", command]
+    else:
+        cmd = [terminal.shell, "-c", command]
 
     start = time.monotonic()
     try:
