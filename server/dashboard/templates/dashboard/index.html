@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ai-maxx-ide — Server dashboard</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f1419;
+      --card: #1a2332;
+      --text: #e7ecf3;
+      --muted: #8b98a8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --danger: #f87171;
+      --ok: #4ade80;
+      --border: #2a3648;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    main {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+    }
+    h1 { margin: 0 0 0.25rem; font-size: 1.75rem; }
+    .sub { color: var(--muted); margin-bottom: 1.5rem; }
+    .meta {
+      display: grid;
+      gap: 0.35rem;
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.02);
+    }
+    .meta code { color: var(--text); }
+    .grid { display: grid; gap: 1rem; }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--card);
+      padding: 1.25rem;
+    }
+    .card h2 { margin: 0 0 0.35rem; font-size: 1.1rem; }
+    .card p { margin: 0 0 1rem; color: var(--muted); font-size: 0.95rem; }
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 8px;
+      padding: 0.65rem 1rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--accent);
+      color: white;
+    }
+    button:hover { background: var(--accent-hover); }
+    .error {
+      border: 1px solid var(--danger);
+      color: var(--danger);
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+    }
+    .job {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      margin-top: 1.5rem;
+      background: rgba(74, 222, 128, 0.06);
+    }
+    .job h3 { margin: 0 0 0.5rem; color: var(--ok); }
+    pre {
+      margin: 0.5rem 0 0;
+      padding: 0.75rem;
+      background: #0a0e14;
+      border-radius: 8px;
+      overflow: auto;
+      font-size: 0.82rem;
+      max-height: 240px;
+    }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ai-maxx-ide server</h1>
+    <p class="sub">Local dashboard — run Windows maintenance scripts and check API health.</p>
+
+    <div class="meta">
+      <div>API health: <a href="/api/health/" target="_blank" rel="noopener">/api/health/</a></div>
+      <div>Listening: <code>{{ bind_host }}:{{ bind_port }}</code>{% if frozen %} (packaged){% endif %}</div>
+      <div>Config folder: <code>{{ app_root }}</code></div>
+      <div>Place <code>.env</code> next to the executable — synced on every start.</div>
+    </div>
+
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <div class="grid">
+      {% for script in scripts %}
+      <section class="card">
+        <h2>{{ script.label }}</h2>
+        <p>{{ script.description }}</p>
+        <form method="post" action="{% url 'dashboard-run-form' %}">
+          {% csrf_token %}
+          <input type="hidden" name="script_id" value="{{ script.id }}">
+          <button type="submit">Run {{ script.file }}</button>
+        </form>
+      </section>
+      {% endfor %}
+    </div>
+
+    {% if last_job %}
+    <section class="job">
+      <h3>Started {{ last_job.script_id }}</h3>
+      <div>PID: <code>{{ last_job.pid }}</code></div>
+      <div>Log: <code>{{ last_job.log_path }}</code></div>
+      {% if last_job.log_tail %}
+      <pre>{{ last_job.log_tail }}</pre>
+      {% endif %}
+    </section>
+    {% endif %}
+  </main>
+</body>
+</html>

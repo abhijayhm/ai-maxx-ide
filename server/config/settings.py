@@ -5,8 +5,12 @@ from pathlib import Path
 
 import environ
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-REPO_ROOT = BASE_DIR.parent
+from standalone.bootstrap import ensure_runtime, repo_root as bootstrap_repo_root, server_dir
+
+BASE_DIR = server_dir()
+REPO_ROOT = bootstrap_repo_root()
+
+ensure_runtime()
 
 env = environ.Env(
     DEBUG=(bool, True),
@@ -50,6 +54,7 @@ INSTALLED_APPS = [
     "core",
     "ide",
     "terminals",
+    "dashboard",
 ]
 
 MIDDLEWARE = [
@@ -66,10 +71,16 @@ MIDDLEWARE = [
 ROOT_URLCONF = "config.urls"
 ASGI_APPLICATION = "config.asgi.application"
 
+from standalone.bootstrap import is_frozen, runtime_root  # noqa: E402
+
+_template_dirs: list[Path] = []
+if is_frozen():
+    _template_dirs.append(runtime_root() / "dashboard" / "templates")
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": _template_dirs,
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -81,7 +92,12 @@ TEMPLATES = [
     },
 ]
 
-DATABASES = {"default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}")}
+DATABASES = {
+    "default": env.db(
+        "DATABASE_URL",
+        default=f"sqlite:///{REPO_ROOT / 'data' / 'db.sqlite3'}",
+    )
+}
 
 # Ensure sqlite parent directory exists for relative DATABASE_URL paths
 _db = DATABASES["default"]

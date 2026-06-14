@@ -194,14 +194,27 @@ class IdeSearchNotifier extends Notifier<IdeSearchState> {
   void _onFrame(Map<String, dynamic> frame) {
     final type = frame['type'] as String? ?? '';
 
+    if (type == 'search_result') {
+      final raw = frame['result'];
+      if (raw is Map<String, dynamic>) {
+        final hit = GrepMatch.fromFrame(raw);
+        _releaseLoader();
+        state = state.copyWith(
+          results: [...state.results, hit],
+        );
+      }
+      return;
+    }
+
     if (type == 'search_complete') {
       final raw = frame['results'];
+      final streamed = state.results;
       final results = raw is List
           ? raw
               .whereType<Map<String, dynamic>>()
               .map(GrepMatch.fromFrame)
               .toList()
-          : const <GrepMatch>[];
+          : streamed;
       _releaseLoader();
       state = state.copyWith(searching: false, results: results);
       return;

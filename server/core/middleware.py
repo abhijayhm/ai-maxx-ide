@@ -13,6 +13,8 @@ PUBLIC_PATHS = (
     "/api/devices/register/",
 )
 
+DASHBOARD_API_PREFIX = "/api/dashboard/"
+
 WS_PATH_PREFIX = "/api/ws/"
 
 
@@ -29,6 +31,9 @@ class DeviceAuthMiddleware:
 
         # WebSockets authenticate via query string in DeviceAuthWsMiddleware.
         if path.startswith(WS_PATH_PREFIX):
+            return self.get_response(request)
+
+        if path.startswith(DASHBOARD_API_PREFIX):
             return self.get_response(request)
 
         if path.endswith("/devices/identifier/") or path.endswith("/devices/identifier"):

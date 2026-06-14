@@ -290,8 +290,10 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: Text(
-                    searchMode == 1 && grep.results.isNotEmpty
-                        ? '${grep.results.length} matches'
+                    searchMode == 1 && (grep.results.isNotEmpty || grep.searching)
+                        ? grep.searching
+                            ? '${grep.results.length} matches…'
+                            : '${grep.results.length} matches'
                         : index.loading
                             ? 'Indexing…'
                             : '${index.searchable.length} indexed',
@@ -500,7 +502,16 @@ class _GrepResultsList extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.workbenchColors;
     if (grep.searching && grep.results.isEmpty) {
-      return const SizedBox.shrink();
+      return Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: colors.fgMuted,
+          ),
+        ),
+      );
     }
     if (grep.error != null) {
       return Center(
