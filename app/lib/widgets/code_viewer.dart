@@ -56,13 +56,18 @@ class CodeViewer extends StatefulWidget {
 }
 
 class _CodeViewerState extends State<CodeViewer> {
-  static const _lineHeight = 22.0;
+  static const _minFontSize = 9.0;
+  static const _maxFontSize = 28.0;
 
   late List<String> _lines;
   late List<List<TextSpan>> _syntaxSpans;
 
-  final _scrollController = ScrollController();
+  final _verticalScrollController = ScrollController();
+  final _horizontalScrollController = ScrollController();
   final _searchController = TextEditingController();
+
+  late bool _wrapLines;
+  late double _fontSize;
 
   int? _selStart;
   int? _selEnd;
@@ -72,17 +77,21 @@ class _CodeViewerState extends State<CodeViewer> {
   int _searchIndex = 0;
 
   bool get _hasSelection => _selStart != null;
+  double get _lineHeight => _fontSize * (22 / 13);
 
   @override
   void initState() {
     super.initState();
+    _wrapLines = widget.wrapLines;
+    _fontSize = vscodeEditorFontSize();
     _rebuildLines();
     _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _verticalScrollController.dispose();
+    _horizontalScrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -95,17 +104,69 @@ class _CodeViewerState extends State<CodeViewer> {
       _clearSelection();
       _refreshSearch();
     }
+    if (old.wrapLines != widget.wrapLines) {
+      setState(() => _wrapLines = widget.wrapLines);
+    }
   }
 
   void _rebuildLines() {
     _lines = widget.source.split('\n');
     final languageName = languageNameForPath(widget.filePath ?? widget.fileName);
-    final baseStyle = vscodeEditorTextStyleRaw();
+    final baseStyle = vscodeEditorTextStyleRaw(
+      size: _fontSize,
+      height: _lineHeight / _fontSize,
+    );
     _syntaxSpans = buildSyntaxLineSpans(
       widget.source,
       languageName,
       baseStyle: baseStyle,
     );
+  }
+
+  void _toggleWrap() {
+    _preserveScroll(() => setState(() => _wrapLines = !_wrapLines));
+  }
+
+  void _zoomIn() {
+    if (_fontSize >= _maxFontSize) {
+      return;
+    }
+    _preserveScroll(() {
+      setState(() {
+        _fontSize = (_fontSize + 1).clamp(_minFontSize, _maxFontSize);
+        _rebuildLines();
+      });
+    });
+  }
+
+  void _zoomOut() {
+    if (_fontSize <= _minFontSize) {
+      return;
+    }
+    _preserveScroll(() {
+      setState(() {
+        _fontSize = (_fontSize - 1).clamp(_minFontSize, _maxFontSize);
+        _rebuildLines();
+      });
+    });
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+  }
+
+  double _contentWidth(double viewportWidth) {
+    if (_wrapLines || _lines.isEmpty) {
+      return viewportWidth;
+    }
+    var maxLen = 0;
+    for (final line in _lines) {
+      if (line.length > maxLen) {
+        maxLen = line.length;
+      }
+    }
+    final estimated = maxLen * _fontSize * 0.58 + 24;
+    return estimated > viewportWidth ? estimated : viewportWidth;
   }
 
   void _onSearchChanged() {
@@ -132,9 +193,9 @@ class _CodeViewerState extends State<CodeViewer> {
     }
     final match = _searchMatches[index];
     final offset = (match.line - 1) * _lineHeight;
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        offset.clamp(0.0, _scrollController.position.maxScrollExtent),
+    if (_verticalScrollController.hasClients) {
+      _verticalScrollController.animateTo(
+        offset.clamp(0.0, _verticalScrollController.position.maxScrollExtent),
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
       );
@@ -163,18 +224,19 @@ class _CodeViewerState extends State<CodeViewer> {
   }
 
   void _preserveScroll(void Function() update) {
-    final offset =
-        _scrollController.hasClients ? _scrollController.offset : null;
+    final offset = _verticalScrollController.hasClients
+        ? _verticalScrollController.offset
+        : null;
     update();
     if (offset == null) {
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) {
+      if (!_verticalScrollController.hasClients) {
         return;
       }
-      _scrollController.jumpTo(
-        offset.clamp(0.0, _scrollController.position.maxScrollExtent),
+      _verticalScrollController.jumpTo(
+        offset.clamp(0.0, _verticalScrollController.position.maxScrollExtent),
       );
     });
   }
@@ -272,9 +334,14 @@ class _CodeViewerState extends State<CodeViewer> {
               onClear: _clearSelection,
               onBack: widget.onBack,
               onEnterEdit: widget.onEnterEdit,
+              wrapLines: _wrapLines,
+              fontSize: _fontSize,
               onSelectAll: _lines.isNotEmpty && widget.onSelection != null
                   ? _selectAll
                   : null,
+              onToggleWrap: _toggleWrap,
+              onZoomIn: _zoomIn,
+              onZoomOut: _zoomOut,
             ),
             Visibility(
               visible: !_hasSelection,
@@ -287,6 +354,7 @@ class _CodeViewerState extends State<CodeViewer> {
                 matchIndex: _searchIndex,
                 onPrev: _prevMatch,
                 onNext: _nextMatch,
+                onClear: _clearSearch,
               ),
             ),
             const Divider(height: 1, thickness: 1, color: _C.borderSubtle),
@@ -294,53 +362,75 @@ class _CodeViewerState extends State<CodeViewer> {
           Expanded(
             child: ColoredBox(
               color: _C.bgCanvas,
-              child: Stack(
-                children: [
-                  ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    itemCount: _lines.length,
-                    itemBuilder: (ctx, i) {
-                      final line1 = i + 1;
-                      final syntax = i < _syntaxSpans.length
-                          ? _syntaxSpans[i]
-                          : [TextSpan(text: _lines[i])];
-                      final highlighted = applySearchHighlights(
-                        syntax,
-                        _lines[i],
-                        _searchQuery,
-                        activeMatchStart: _activeSearchStartForLine(line1),
-                        matchColor: _C.searchMatch,
-                        activeMatchColor: _C.searchMatchActive,
-                      );
-                      return _CodeLine(
-                        spans: highlighted,
-                        isSelected: _isSelected(line1),
-                        wrap: widget.wrapLines,
-                        inSelectionMode: _hasSelection,
-                        onLongPress: () => _handleLongPress(line1),
-                        onTap: () => _handleTap(line1),
-                      );
-                    },
-                  ),
-                  if (_hasSelection)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: _SelectionStatusBar(
-                        start: _selStart!,
-                        end: _selEnd,
-                      ),
-                    ),
-                ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return Stack(
+                    children: [
+                      _buildCodeScrollView(constraints.maxWidth),
+                      if (_hasSelection)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: _SelectionStatusBar(
+                            start: _selStart!,
+                            end: _selEnd,
+                          ),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCodeLine(int index) {
+    final line1 = index + 1;
+    final syntax = index < _syntaxSpans.length
+        ? _syntaxSpans[index]
+        : [TextSpan(text: _lines[index])];
+    final highlighted = applySearchHighlights(
+      syntax,
+      _lines[index],
+      _searchQuery,
+      activeMatchStart: _activeSearchStartForLine(line1),
+      matchColor: _C.searchMatch,
+      activeMatchColor: _C.searchMatchActive,
+    );
+    return _CodeLine(
+      spans: highlighted,
+      isSelected: _isSelected(line1),
+      wrap: _wrapLines,
+      lineHeight: _lineHeight,
+      inSelectionMode: _hasSelection,
+      onLongPress: () => _handleLongPress(line1),
+      onTap: () => _handleTap(line1),
+    );
+  }
+
+  Widget _buildCodeScrollView(double viewportWidth) {
+    final listView = ListView.builder(
+      controller: _verticalScrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      itemCount: _lines.length,
+      itemBuilder: (ctx, i) => _buildCodeLine(i),
+    );
+
+    if (_wrapLines) {
+      return listView;
+    }
+
+    final contentWidth = _contentWidth(viewportWidth);
+    return SingleChildScrollView(
+      controller: _horizontalScrollController,
+      scrollDirection: Axis.horizontal,
+      child: SizedBox(
+        width: contentWidth,
+        child: listView,
       ),
     );
   }
@@ -353,6 +443,7 @@ class _InFileSearchBar extends StatelessWidget {
     required this.matchIndex,
     required this.onPrev,
     required this.onNext,
+    required this.onClear,
   });
 
   final TextEditingController controller;
@@ -360,6 +451,7 @@ class _InFileSearchBar extends StatelessWidget {
   final int matchIndex;
   final VoidCallback onPrev;
   final VoidCallback onNext;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -395,6 +487,14 @@ class _InFileSearchBar extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                   borderSide: const BorderSide(color: Color(0xFF3C3C3C)),
                 ),
+                suffixIcon: controller.text.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: onClear,
+                        icon: const Icon(Icons.close, size: 16),
+                        color: _C.fgMuted,
+                        tooltip: 'Clear search',
+                      ),
               ),
             ),
           ),
@@ -424,6 +524,11 @@ class _Header extends StatelessWidget {
     required this.selEnd,
     required this.onConfirm,
     required this.onClear,
+    required this.wrapLines,
+    required this.fontSize,
+    required this.onToggleWrap,
+    required this.onZoomIn,
+    required this.onZoomOut,
     this.onBack,
     this.onEnterEdit,
     this.onSelectAll,
@@ -433,8 +538,13 @@ class _Header extends StatelessWidget {
   final bool hasSelection;
   final int? selStart;
   final int? selEnd;
+  final bool wrapLines;
+  final double fontSize;
   final VoidCallback onConfirm;
   final VoidCallback onClear;
+  final VoidCallback onToggleWrap;
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
   final VoidCallback? onBack;
   final VoidCallback? onEnterEdit;
   final VoidCallback? onSelectAll;
@@ -484,12 +594,15 @@ class _Header extends StatelessWidget {
               color: _C.accentPrimary,
             )
           else if (!hasSelection) ...[
-            if (onSelectAll != null)
-              _IconBtn(
-                icon: Icons.select_all,
-                onTap: onSelectAll!,
-                tooltip: 'Select all lines',
-              ),
+            _ViewerOptionsMenu(
+              wrapLines: wrapLines,
+              fontSize: fontSize,
+              showSelectAll: onSelectAll != null,
+              onSelectAll: onSelectAll,
+              onToggleWrap: onToggleWrap,
+              onZoomIn: onZoomIn,
+              onZoomOut: onZoomOut,
+            ),
             if (onEnterEdit != null)
               _IconBtn(
                 icon: Icons.edit_outlined,
@@ -502,6 +615,87 @@ class _Header extends StatelessWidget {
     );
   }
 }
+
+class _ViewerOptionsMenu extends StatelessWidget {
+  const _ViewerOptionsMenu({
+    required this.wrapLines,
+    required this.fontSize,
+    required this.showSelectAll,
+    required this.onToggleWrap,
+    required this.onZoomIn,
+    required this.onZoomOut,
+    this.onSelectAll,
+  });
+
+  final bool wrapLines;
+  final double fontSize;
+  final bool showSelectAll;
+  final VoidCallback? onSelectAll;
+  final VoidCallback onToggleWrap;
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_ViewerMenuAction>(
+      tooltip: 'View options',
+      icon: const Icon(Icons.more_vert, size: 20, color: _C.fgMuted),
+      padding: EdgeInsets.zero,
+      onSelected: (action) {
+        switch (action) {
+          case _ViewerMenuAction.selectAll:
+            onSelectAll?.call();
+          case _ViewerMenuAction.wrap:
+            onToggleWrap();
+          case _ViewerMenuAction.zoomIn:
+            onZoomIn();
+          case _ViewerMenuAction.zoomOut:
+            onZoomOut();
+        }
+      },
+      itemBuilder: (context) => [
+        if (showSelectAll)
+          const PopupMenuItem(
+            value: _ViewerMenuAction.selectAll,
+            child: Text('Select all lines'),
+          ),
+        if (showSelectAll) const PopupMenuDivider(),
+        PopupMenuItem(
+          value: _ViewerMenuAction.wrap,
+          child: Row(
+            children: [
+              Expanded(child: Text(wrapLines ? 'Unwrap lines' : 'Wrap lines')),
+              if (wrapLines)
+                const Icon(Icons.check, size: 16, color: _C.accentPrimary),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: _ViewerMenuAction.zoomIn,
+          child: Row(
+            children: [
+              const Icon(Icons.zoom_in, size: 18),
+              const SizedBox(width: 8),
+              Text('Zoom in (${fontSize.round()}pt)'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: _ViewerMenuAction.zoomOut,
+          child: Row(
+            children: [
+              const Icon(Icons.zoom_out, size: 18),
+              const SizedBox(width: 8),
+              const Text('Zoom out'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+enum _ViewerMenuAction { selectAll, wrap, zoomIn, zoomOut }
 
 class _IconBtn extends StatelessWidget {
   const _IconBtn({
@@ -538,6 +732,7 @@ class _CodeLine extends StatelessWidget {
     required this.spans,
     required this.isSelected,
     required this.wrap,
+    required this.lineHeight,
     required this.inSelectionMode,
     required this.onLongPress,
     required this.onTap,
@@ -546,11 +741,10 @@ class _CodeLine extends StatelessWidget {
   final List<InlineSpan> spans;
   final bool isSelected;
   final bool wrap;
+  final double lineHeight;
   final bool inSelectionMode;
   final VoidCallback onLongPress;
   final VoidCallback onTap;
-
-  static const _lineHeight = 22.0;
 
   @override
   Widget build(BuildContext context) {
@@ -570,18 +764,13 @@ class _CodeLine extends StatelessWidget {
       onTap: inSelectionMode ? onTap : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 80),
-        constraints: const BoxConstraints(minHeight: _lineHeight),
+        constraints: BoxConstraints(minHeight: lineHeight),
         decoration: BoxDecoration(
           color: isSelected ? _C.selectionBg : Colors.transparent,
           border: leftBorder,
         ),
         padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
-        child: wrap
-            ? rich
-            : SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: rich,
-              ),
+        child: rich,
       ),
     );
   }
