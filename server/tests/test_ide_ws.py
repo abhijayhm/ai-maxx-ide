@@ -44,10 +44,17 @@ async def test_ide_search_ws(api_key, registered_device, device_hash, workspace,
     started = await communicator.receive_json_from()
     assert started["type"] == "search_started"
 
-    msg = await communicator.receive_json_from()
-    assert msg["type"] == "search_complete"
+    results = []
+    while True:
+        msg = await communicator.receive_json_from(timeout=5)
+        if msg["type"] == "search_result":
+            results.append(msg["result"])
+            continue
+        assert msg["type"] == "search_complete"
+        break
     assert msg["count"] >= 1
-    assert any(r.get("asset") for r in msg.get("results", []))
+    assert len(results) >= 1
+    assert any(r.get("asset") for r in results)
     await communicator.disconnect()
 
 
@@ -72,10 +79,17 @@ async def test_ide_search_ws_spaced_phrase(
         }
     )
     await communicator.receive_json_from()
-    msg = await communicator.receive_json_from()
-    assert msg["type"] == "search_complete"
+    results = []
+    while True:
+        msg = await communicator.receive_json_from(timeout=5)
+        if msg["type"] == "search_result":
+            results.append(msg["result"])
+            continue
+        assert msg["type"] == "search_complete"
+        break
     assert msg["count"] == 1
-    assert msg["results"][0]["text"] == "say hello world today"
+    assert len(results) == 1
+    assert results[0]["text"] == "say hello world today"
     await communicator.disconnect()
 
 
