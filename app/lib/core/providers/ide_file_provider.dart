@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_config.dart';
 import '../ws/ws_client.dart';
 import 'app_providers.dart';
+import 'global_loader_provider.dart';
 
 class OpenFileState {
   const OpenFileState({
@@ -67,11 +68,17 @@ class IdeFileNotifier extends Notifier<OpenFileState> {
   StreamSubscription<Map<String, dynamic>>? _sub;
   final StringBuffer _textBuffer = StringBuffer();
   final List<int> _byteBuffer = [];
+  LoaderHandle? _loader;
 
   @override
   OpenFileState build() {
     ref.onDispose(_disconnect);
     return const OpenFileState();
+  }
+
+  void _releaseLoader() {
+    _loader?.release();
+    _loader = null;
   }
 
   Future<void> open(String path) async {
@@ -80,30 +87,44 @@ class IdeFileNotifier extends Notifier<OpenFileState> {
       return;
     }
 
-    final session = await ref.read(sessionProvider.future);
-    final workspaceId = int.tryParse(session.activeWorkspaceId ?? '');
-    if (workspaceId == null) {
-      state = state.copyWith(error: 'Open a workspace first.');
-      return;
+    _releaseLoader();
+    _ws?.send({'type': 'cancel'});
+
+    try {
+      final session = await ref.read(sessionProvider.future);
+      final workspaceId = int.tryParse(session.activeWorkspaceId ?? '');
+      if (workspaceId == null) {
+        state = state.copyWith(error: 'Open a workspace first.');
+        return;
+      }
+
+      await _ensureConnected(session);
+      _textBuffer.clear();
+      _byteBuffer.clear();
+      state = OpenFileState(
+        path: trimmed,
+        loading: true,
+      );
+      _loader = ref.read(globalLoaderProvider.notifier).acquire('Loading file…');
+
+      _ws!.send({
+        'type': 'get',
+        'workspace_id': workspaceId,
+        'path': trimmed,
+      });
+    } catch (error) {
+      _releaseLoader();
+      state = OpenFileState(
+        path: trimmed,
+        loading: false,
+        error: error.toString(),
+      );
     }
-
-    await _ensureConnected(session);
-    _textBuffer.clear();
-    _byteBuffer.clear();
-    state = OpenFileState(
-      path: trimmed,
-      loading: true,
-    );
-
-    _ws!.send({
-      'type': 'get',
-      'workspace_id': workspaceId,
-      'path': trimmed,
-    });
   }
 
   void close() {
     _ws?.send({'type': 'cancel'});
+    _releaseLoader();
     state = const OpenFileState();
     _textBuffer.clear();
     _byteBuffer.clear();
@@ -155,6 +176,7 @@ class IdeFileNotifier extends Notifier<OpenFileState> {
     }
 
     if (type == 'file_complete') {
+      _releaseLoader();
       if (state.isText) {
         state = state.copyWith(
           loading: false,
@@ -169,23 +191,21 @@ class IdeFileNotifier extends Notifier<OpenFileState> {
       return;
     }
 
-    if (type == 'error') {
-      state = state.copyWith(
-        loading: false,
-        error: frame['message'] as String? ?? 'Failed to load file',
-      );
-      return;
-    }
-
-    if (type == 'cancelled') {
-      if (!state.loading) {
-        return;
+    if (isWsTerminalFrame(type)) {
+      _releaseLoader();
+      if (type == 'error' || type == 'connection_error') {
+        state = state.copyWith(
+          loading: false,
+          error: frame['message'] as String? ?? 'Failed to load file',
+        );
+      } else {
+        state = state.copyWith(loading: false);
       }
-      state = state.copyWith(loading: false);
     }
   }
 
   Future<void> _disconnect() async {
+    _releaseLoader();
     await _sub?.cancel();
     _sub = null;
     await _ws?.disconnect();

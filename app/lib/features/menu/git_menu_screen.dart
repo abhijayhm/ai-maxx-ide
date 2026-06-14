@@ -47,12 +47,6 @@ class _GitMenuScreenState extends ConsumerState<GitMenuScreen> {
         child: Column(
           children: [
             _GitMenuHeader(onClose: () => context.go('/projects')),
-            if (git.loading)
-              LinearProgressIndicator(
-                minHeight: 2,
-                color: colors.accentPrimary,
-                backgroundColor: colors.borderSubtle,
-              ),
             if (git.error != null)
               Padding(
                 padding: const EdgeInsets.all(12),

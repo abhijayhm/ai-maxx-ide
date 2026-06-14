@@ -6,9 +6,12 @@ import '../config/app_config.dart';
 import '../db/app_database.dart';
 import '../device_identifier.dart';
 import 'ide_index_provider.dart';
+import 'ide_file_provider.dart';
+import 'ide_search_provider.dart';
 import 'watchdog_provider.dart';
 import 'agent_session_provider.dart';
 import 'composer_settings_provider.dart';
+import 'global_loader_provider.dart';
 
 final appConfigProvider = Provider<AppConfig>((ref) => AppConfig());
 
@@ -25,16 +28,19 @@ final sessionProvider =
   SessionNotifier.new,
 );
 
-final apiClientProvider = FutureProvider<ApiClient>((ref) async {
+final apiClientProvider = Provider<ApiClient>((ref) {
   final config = ref.watch(appConfigProvider);
-  final session = await ref.watch(sessionProvider.future);
+  ref.watch(sessionProvider);
+  final session = ref.read(sessionProvider).valueOrNull;
 
   return ApiClient(
     config: config,
     readHeaders: () => (
-      apiKey: session.apiKey,
-      deviceHash: session.deviceHash,
-      workspaceId: session.activeWorkspaceId,
+      apiKey: session?.apiKey.isNotEmpty == true
+          ? session!.apiKey
+          : config.apiKey,
+      deviceHash: session?.deviceHash,
+      workspaceId: session?.activeWorkspaceId,
     ),
   );
 });
@@ -43,7 +49,7 @@ final authRepositoryProvider = FutureProvider<AuthRepository>((ref) async {
   final database = await ref.watch(appDatabaseProvider.future);
   final config = ref.watch(appConfigProvider);
   final deviceIdentifier = ref.watch(deviceIdentifierProvider);
-  final apiClient = await ref.watch(apiClientProvider.future);
+  final apiClient = ref.watch(apiClientProvider);
 
   return AuthRepository(
     apiClient: apiClient,
@@ -57,10 +63,12 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
   @override
   Future<SessionSnapshot> build() async {
     var snapshot = await _loadSessionSnapshot();
-    if (!snapshot.isRegistered && snapshot.apiKey.isNotEmpty) {
+    if (!snapshot.isRegistered &&
+        snapshot.hasStoredApiKey &&
+        snapshot.apiKey.isNotEmpty) {
       snapshot = await _tryAutoRegister(snapshot);
     }
-    _kickoffIdeServices(snapshot);
+    Future.microtask(() => _kickoffIdeServices(snapshot));
     return snapshot;
   }
 
@@ -118,16 +126,70 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
   Future<void> refresh() async {
     final snapshot = await _loadSessionSnapshot();
     state = AsyncData(snapshot);
-    ref.invalidate(apiClientProvider);
-    ref.invalidate(authRepositoryProvider);
   }
 
-  Future<void> register(String apiKey) async {
-    final auth = await ref.read(authRepositoryProvider.future);
-    final snapshot = await auth.registerDevice(apiKey);
+  Future<void> persistServerUrl(String serverUrl) async {
+    final normalized = AppConfig.normalizeServerUrl(serverUrl);
+    final database = await ref.read(appDatabaseProvider.future);
+    await database.setSetting('server_url', normalized);
+    ref.read(appConfigProvider).serverUrl = normalized;
+  }
+
+  Future<void> register(String apiKey, {required String serverUrl}) async {
+    final normalizedUrl = AppConfig.normalizeServerUrl(serverUrl);
+    final database = await ref.read(appDatabaseProvider.future);
+    final config = ref.read(appConfigProvider);
+    final deviceIdentifier = ref.read(deviceIdentifierProvider);
+
+    await database.setSetting('server_url', normalizedUrl);
+    config.serverUrl = normalizedUrl;
+    config.apiKey = apiKey;
+
+    final deviceHash = await deviceIdentifier.computeHash();
+    final apiClient = ApiClient(
+      config: config,
+      readHeaders: () => (
+        apiKey: apiKey,
+        deviceHash: deviceHash,
+        workspaceId: null,
+      ),
+    );
+    final auth = AuthRepository(
+      apiClient: apiClient,
+      database: database,
+      deviceIdentifier: deviceIdentifier,
+      config: config,
+    );
+
+    final snapshot = await auth.registerDevice(apiKey, serverUrl: normalizedUrl);
     state = AsyncData(snapshot);
-    ref.invalidate(authRepositoryProvider);
-    ref.invalidate(apiClientProvider);
+    await _kickoffIdeServices(snapshot);
+  }
+
+  Future<void> logout() async {
+    final database = await ref.read(appDatabaseProvider.future);
+    final config = ref.read(appConfigProvider);
+    final deviceIdentifier = ref.read(deviceIdentifierProvider);
+    final apiClient = ApiClient(
+      config: config,
+      readHeaders: () => (
+        apiKey: config.apiKey,
+        deviceHash: null,
+        workspaceId: null,
+      ),
+    );
+    final auth = AuthRepository(
+      apiClient: apiClient,
+      database: database,
+      deviceIdentifier: deviceIdentifier,
+      config: config,
+    );
+    final snapshot = await auth.logout();
+    state = AsyncData(snapshot);
+    await ref.read(watchdogProvider.notifier).disconnect();
+    ref.read(globalLoaderProvider.notifier).reset();
+    ref.read(ideFileProvider.notifier).close();
+    ref.read(ideSearchProvider.notifier).search('');
   }
 
   Future<void> openWorkspace(String folderPath) async {
@@ -143,14 +205,18 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
     await ref.read(composerSettingsProvider.notifier).loadModels();
   }
 
-  void _kickoffIdeServices(SessionSnapshot snapshot) {
-    if (!snapshot.isReady) {
+  Future<void> _kickoffIdeServices(SessionSnapshot snapshot) async {
+    if (!snapshot.isAuthenticated) {
       return;
     }
-    Future.microtask(() async {
-      await ref.read(watchdogProvider.notifier).connect();
+    await ref.read(watchdogProvider.notifier).connect();
+    await ref.read(ideIndexProvider.notifier).refreshExposed(
+          background: ref.read(ideIndexProvider).hasData,
+          force: true,
+        );
+    if (snapshot.isReady) {
       await ref.read(agentSessionsProvider.notifier).ensureDefaultSession();
       await ref.read(composerSettingsProvider.notifier).loadModels();
-    });
+    }
   }
 }

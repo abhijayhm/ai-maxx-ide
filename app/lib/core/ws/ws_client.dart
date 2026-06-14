@@ -66,12 +66,8 @@ class WsClient {
       final socket = await WebSocket.connect(uri.toString());
       _channel = IOWebSocketChannel(socket);
     } catch (error) {
-      _deliver({
-        'type': 'connection_error',
-        'code': 'websocket_connect_failed',
-        'message': error.toString(),
-      });
-      return;
+      _channel = null;
+      throw StateError('WebSocket connection failed: $error');
     }
 
     _subscription = _channel!.stream.listen(

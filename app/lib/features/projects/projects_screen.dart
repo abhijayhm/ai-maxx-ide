@@ -32,7 +32,33 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   String _debouncedQuery = '';
   Timer? _debounce;
   bool _agentExpanded = false;
-  bool _browseRestored = false;
+
+  void _runFindSearchIfNeeded() {
+    final browse = ref.read(projectsBrowseProvider);
+    if (browse.searchMode != 1) {
+      return;
+    }
+    final q = browse.query.trim();
+    if (q.isEmpty) {
+      ref.read(ideSearchProvider.notifier).search('');
+      return;
+    }
+    ref.read(ideSearchProvider.notifier).search(q);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final browse = ref.read(projectsBrowseProvider);
+      _searchController.text = browse.query;
+      setState(() => _debouncedQuery = browse.query);
+      _runFindSearchIfNeeded();
+    });
+  }
 
   @override
   void dispose() {
@@ -137,12 +163,6 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     final query = browse.query;
     final searchMode = browse.searchMode;
 
-    if (!_browseRestored) {
-      _browseRestored = true;
-      _searchController.text = query;
-      _debouncedQuery = query;
-    }
-
     if (openFile.isOpen) {
       return ColoredBox(
         color: colors.canvas,
@@ -206,6 +226,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
               onClear: () {
                 _searchController.clear();
                 ref.read(projectsBrowseProvider.notifier).clearQuery();
+                ref.read(ideSearchProvider.notifier).search('');
                 _onQueryChanged('');
               },
               onStop: agent.running
@@ -221,17 +242,22 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                 SegmentedToggle(
                   options: const ['File Search', 'Find'],
                   selectedIndex: searchMode,
-                  onChanged: (index) => ref
-                      .read(projectsBrowseProvider.notifier)
-                      .setSearchMode(index),
+                  onChanged: (index) {
+                    ref.read(projectsBrowseProvider.notifier).setSearchMode(index);
+                    if (index == 1) {
+                      _runFindSearchIfNeeded();
+                    }
+                  },
                 ),
                 const SizedBox(height: 6),
                 Align(
                   alignment: Alignment.centerRight,
                   child: Text(
-                    index.loading
-                        ? 'Indexing…'
-                        : '${index.searchable.length} indexed',
+                    searchMode == 1 && grep.results.isNotEmpty
+                        ? '${grep.results.length} matches'
+                        : index.loading
+                            ? 'Indexing…'
+                            : '${index.searchable.length} indexed',
                     style: TextStyle(color: colors.fgMuted, fontSize: 11),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
@@ -252,24 +278,26 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
           Expanded(
             child: Stack(
               children: [
-                _isSearching
-                    ? (searchMode == 0
-                        ? _FileResultsList(
-                            files: fileHits,
-                            query: query,
-                            onOpen: _openFile,
-                          )
-                        : _GrepResultsList(
-                            grep: grep,
-                            query: query,
-                            onOpen: _openFile,
-                          ))
-                    : WorkspaceTreeBrowser(
-                        root: index.workspaceTree,
-                        loading: index.loading && index.workspaceTree == null,
-                        onPickPath: _insertContextRef,
-                        onOpenFile: _openFile,
-                      ),
+                Positioned.fill(
+                  child: _isSearching
+                      ? (searchMode == 0
+                          ? _FileResultsList(
+                              files: fileHits,
+                              query: query,
+                              onOpen: _openFile,
+                            )
+                          : _GrepResultsList(
+                              grep: grep,
+                              query: query,
+                              onOpen: _openFile,
+                            ))
+                      : WorkspaceTreeBrowser(
+                          root: index.workspaceTree,
+                          loading: index.loading && index.workspaceTree == null,
+                          onPickPath: _insertContextRef,
+                          onOpenFile: _openFile,
+                        ),
+                ),
                 if (_agentExpanded)
                   Positioned.fill(
                     child: Material(
@@ -330,15 +358,18 @@ class _FileResultsList extends StatelessWidget {
           Divider(height: 1, color: colors.borderSubtle),
       itemBuilder: (context, index) {
         final file = files[index];
-        return ListTile(
-          dense: true,
-          onTap: () => onOpen(file.path),
-          title: Text(file.asset, style: workbenchMonoStyle(context, size: 13)),
-          subtitle: Text(
-            file.path,
-            style: TextStyle(color: colors.fgMuted, fontSize: 11),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+        return Material(
+          color: Colors.transparent,
+          child: ListTile(
+            dense: true,
+            onTap: () => onOpen(file.path),
+            title: Text(file.asset, style: workbenchMonoStyle(context, size: 13)),
+            subtitle: Text(
+              file.path,
+              style: TextStyle(color: colors.fgMuted, fontSize: 11),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         );
       },
@@ -361,7 +392,7 @@ class _GrepResultsList extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.workbenchColors;
     if (grep.searching && grep.results.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox.shrink();
     }
     if (grep.error != null) {
       return Center(
@@ -382,24 +413,27 @@ class _GrepResultsList extends StatelessWidget {
           Divider(height: 1, color: colors.borderSubtle),
       itemBuilder: (context, index) {
         final hit = grep.results[index];
-        return ListTile(
-          dense: true,
-          onTap: () => onOpen(hit.path),
-          title: Text(hit.asset, style: workbenchMonoStyle(context, size: 13)),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                hit.path,
-                style: TextStyle(color: colors.fgMuted, fontSize: 11),
-              ),
-              Text(
-                'L${hit.line}: ${hit.text}',
-                style: workbenchMonoStyle(context, size: 11, color: colors.fgMuted),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+        return Material(
+          color: Colors.transparent,
+          child: ListTile(
+            dense: true,
+            onTap: () => onOpen(hit.path),
+            title: Text(hit.asset, style: workbenchMonoStyle(context, size: 13)),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hit.path,
+                  style: TextStyle(color: colors.fgMuted, fontSize: 11),
+                ),
+                Text(
+                  'L${hit.line}: ${hit.text}',
+                  style: workbenchMonoStyle(context, size: 11, color: colors.fgMuted),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         );
       },

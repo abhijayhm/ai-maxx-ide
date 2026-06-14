@@ -61,6 +61,10 @@ class WatchdogNotifier extends Notifier<bool> {
     }
   }
 
+  Future<void> disconnect() async {
+    await _disconnect();
+  }
+
   Future<void> _disconnect() async {
     await _sub?.cancel();
     _sub = null;

@@ -52,7 +52,7 @@ class _WorkspaceTreeBrowserState extends ConsumerState<WorkspaceTreeBrowser> {
     final explorer = ref.watch(workspaceTreeExplorerProvider);
 
     if (widget.loading && widget.root == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox.shrink();
     }
 
     final root = widget.root;
@@ -159,47 +159,50 @@ class _TreeTile extends ConsumerWidget {
       children: [
         GestureDetector(
           onLongPress: () => onLongPress(node.path),
-          child: ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.only(left: 8.0 + depth * 16),
-            leading: Icon(
-              isFolder
-                  ? (expanded
-                      ? Icons.folder_open_outlined
-                      : Icons.folder_outlined)
-                  : Icons.insert_drive_file_outlined,
-              size: 18,
-              color: isFolder ? colors.aiEditedFileFg : colors.fgMuted,
+          child: Material(
+            color: selected
+                ? colors.aiCommandBg.withValues(alpha: 0.35)
+                : Colors.transparent,
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.only(left: 8.0 + depth * 16),
+              leading: Icon(
+                isFolder
+                    ? (expanded
+                        ? Icons.folder_open_outlined
+                        : Icons.folder_outlined)
+                    : Icons.insert_drive_file_outlined,
+                size: 18,
+                color: isFolder ? colors.aiEditedFileFg : colors.fgMuted,
+              ),
+              title: Text(
+                node.asset,
+                style: workbenchMonoStyle(context, size: 13),
+              ),
+              subtitle: Text(
+                node.path,
+                style: TextStyle(color: colors.fgMuted, fontSize: 10),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: hasChildren
+                  ? IconButton(
+                      icon: Icon(
+                        expanded ? Icons.expand_less : Icons.expand_more,
+                        size: 18,
+                        color: colors.fgMuted,
+                      ),
+                      onPressed: () => explorer.toggleExpanded(node.path),
+                    )
+                  : null,
+              onTap: () {
+                if (hasChildren) {
+                  explorer.toggleExpanded(node.path);
+                } else if (!isFolder) {
+                  onOpenFile?.call(node.path);
+                }
+              },
             ),
-            title: Text(
-              node.asset,
-              style: workbenchMonoStyle(context, size: 13),
-            ),
-            subtitle: Text(
-              node.path,
-              style: TextStyle(color: colors.fgMuted, fontSize: 10),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: hasChildren
-                ? IconButton(
-                    icon: Icon(
-                      expanded ? Icons.expand_less : Icons.expand_more,
-                      size: 18,
-                      color: colors.fgMuted,
-                    ),
-                    onPressed: () => explorer.toggleExpanded(node.path),
-                  )
-                : null,
-            selected: selected,
-            selectedTileColor: colors.aiCommandBg.withValues(alpha: 0.35),
-            onTap: () {
-              if (hasChildren) {
-                explorer.toggleExpanded(node.path);
-              } else if (!isFolder) {
-                onOpenFile?.call(node.path);
-              }
-            },
           ),
         ),
         if (expanded)

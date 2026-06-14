@@ -82,91 +82,16 @@ class _AgentResponsesPanelState extends State<AgentResponsesPanel> {
 
   Future<void> _openSessionPicker() async {
     final colors = context.workbenchColors;
-    final queryController = TextEditingController();
-    var filtered = widget.sessions;
-
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: colors.elevated,
       isScrollControlled: true,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setModalState) {
-            void filter(String value) {
-              final q = value.trim().toLowerCase();
-              setModalState(() {
-                filtered = q.isEmpty
-                    ? widget.sessions
-                    : widget.sessions
-                        .where((s) => s.label.toLowerCase().contains(q))
-                        .toList();
-              });
-            }
-
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(ctx).viewInsets.bottom,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                    child: TextField(
-                      controller: queryController,
-                      autofocus: true,
-                      style: TextStyle(color: colors.fgDefault, fontSize: 13),
-                      decoration: InputDecoration(
-                        hintText: 'Search sessions',
-                        hintStyle: TextStyle(color: colors.fgPlaceholder),
-                        isDense: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      onChanged: filter,
-                    ),
-                  ),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(ctx).size.height * 0.45,
-                    ),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: filtered.length,
-                      itemBuilder: (ctx, i) {
-                        final session = filtered[i];
-                        final selected = session.id == widget.activeSessionId;
-                        return ListTile(
-                          dense: true,
-                          selected: selected,
-                          title: Text(
-                            session.label,
-                            style: workbenchMonoStyle(ctx, size: 13),
-                          ),
-                          subtitle: Text(
-                            'Session #${session.id}',
-                            style: TextStyle(
-                              color: colors.fgMuted,
-                              fontSize: 11,
-                            ),
-                          ),
-                          onTap: () {
-                            widget.onSessionSelected(session.id);
-                            Navigator.pop(ctx);
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+      builder: (ctx) => _SessionPickerSheet(
+        sessions: widget.sessions,
+        activeSessionId: widget.activeSessionId,
+        onSessionSelected: widget.onSessionSelected,
+      ),
     );
-    queryController.dispose();
   }
 
   @override
@@ -176,6 +101,7 @@ class _AgentResponsesPanelState extends State<AgentResponsesPanel> {
     final activeLabel = _activeSession?.label ?? 'Select session';
 
     return Column(
+      mainAxisSize: widget.expanded ? MainAxisSize.max : MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
@@ -398,4 +324,112 @@ bool _isAssistantStream(AgentEvent event) {
     return false;
   }
   return message['type'] == 'assistant';
+}
+
+class _SessionPickerSheet extends StatefulWidget {
+  const _SessionPickerSheet({
+    required this.sessions,
+    required this.activeSessionId,
+    required this.onSessionSelected,
+  });
+
+  final List<AgentSessionInfo> sessions;
+  final int? activeSessionId;
+  final ValueChanged<int> onSessionSelected;
+
+  @override
+  State<_SessionPickerSheet> createState() => _SessionPickerSheetState();
+}
+
+class _SessionPickerSheetState extends State<_SessionPickerSheet> {
+  late final TextEditingController _queryController;
+  late List<AgentSessionInfo> _filtered;
+
+  @override
+  void initState() {
+    super.initState();
+    _queryController = TextEditingController();
+    _filtered = widget.sessions;
+  }
+
+  @override
+  void dispose() {
+    _queryController.dispose();
+    super.dispose();
+  }
+
+  void _filter(String value) {
+    final q = value.trim().toLowerCase();
+    setState(() {
+      _filtered = q.isEmpty
+          ? widget.sessions
+          : widget.sessions
+              .where((s) => s.label.toLowerCase().contains(q))
+              .toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.workbenchColors;
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: TextField(
+              controller: _queryController,
+              autofocus: true,
+              style: TextStyle(color: colors.fgDefault, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Search sessions',
+                hintStyle: TextStyle(color: colors.fgPlaceholder),
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              onChanged: _filter,
+            ),
+          ),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.45,
+            ),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _filtered.length,
+              itemBuilder: (ctx, i) {
+                final session = _filtered[i];
+                final selected = session.id == widget.activeSessionId;
+                return ListTile(
+                  dense: true,
+                  selected: selected,
+                  title: Text(
+                    session.label,
+                    style: workbenchMonoStyle(ctx, size: 13),
+                  ),
+                  subtitle: Text(
+                    'Session #${session.id}',
+                    style: TextStyle(
+                      color: colors.fgMuted,
+                      fontSize: 11,
+                    ),
+                  ),
+                  onTap: () {
+                    widget.onSessionSelected(session.id);
+                    Navigator.pop(ctx);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

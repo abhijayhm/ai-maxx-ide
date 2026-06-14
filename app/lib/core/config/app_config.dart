@@ -1,7 +1,8 @@
 /// Baked-in defaults for the mobile client.
 class AppConfig {
-  static const String defaultServerUrl = 'https://aimaxx.organisationapp.online';
-  static const String defaultApiKey = 'change-me-to-a-long-random-secret';
+  static const String defaultServerUrl =
+      'https://aimaxx.organisationapp.online';
+  static const String defaultApiKey = '';
 
   AppConfig({
     String? serverUrl,

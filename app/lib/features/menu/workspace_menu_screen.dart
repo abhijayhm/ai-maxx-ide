@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/db/app_database.dart';
 import '../../core/models/route_node.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/providers/global_loader_provider.dart';
 import '../../core/providers/ide_index_provider.dart';
 import '../../theme/workbench_colors.dart';
 import '../../theme/workbench_theme.dart';
@@ -21,11 +22,42 @@ class WorkspaceMenuScreen extends ConsumerStatefulWidget {
 class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
   String? _selectedPath;
   bool _opening = false;
+  bool _promptedAuth = false;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(_restoreSelection);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _promptAuthIfNeeded());
+  }
+
+  void _promptAuthIfNeeded() {
+    if (!mounted || _promptedAuth) {
+      return;
+    }
+    final sessionAsync = ref.read(sessionProvider);
+    if (sessionAsync.isLoading) {
+      return;
+    }
+    final session = sessionAsync.valueOrNull;
+    if (session?.isAuthenticated ?? false) {
+      return;
+    }
+    _promptedAuth = true;
+    showAuthModal(context, ref);
+  }
+
+  Future<void> _logout() async {
+    await ref.read(sessionProvider.notifier).logout();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _selectedPath = null);
+    _promptedAuth = true;
+    await showAuthModal(context, ref);
+    if (mounted) {
+      setState(() => _promptedAuth = false);
+    }
   }
 
   Future<void> _restoreSelection() async {
@@ -44,12 +76,22 @@ class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
     });
   }
 
+  Future<void> _refreshExposed() async {
+    await ref.read(ideIndexProvider.notifier).refreshExposed(
+          background: false,
+          force: true,
+          loaderMessage: 'Refreshing exposed paths…',
+        );
+  }
+
   Future<void> _openSelected() async {
     final path = _selectedPath;
     if (path == null || path.isEmpty) {
       return;
     }
     setState(() => _opening = true);
+    final handle =
+        ref.read(globalLoaderProvider.notifier).acquire('Opening workspace…');
     try {
       await ref.read(sessionProvider.notifier).openWorkspace(path);
       if (mounted) {
@@ -62,6 +104,7 @@ class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
         );
       }
     } finally {
+      handle.release();
       if (mounted) {
         setState(() => _opening = false);
       }
@@ -70,6 +113,21 @@ class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(sessionProvider, (previous, next) {
+      if (_promptedAuth || next.isLoading) {
+        return;
+      }
+      final session = next.valueOrNull;
+      if (session != null && !session.isAuthenticated) {
+        _promptedAuth = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            showAuthModal(context, ref);
+          }
+        });
+      }
+    });
+
     final colors = context.workbenchColors;
     final session = ref.watch(sessionProvider).valueOrNull;
     final index = ref.watch(ideIndexProvider);
@@ -80,7 +138,13 @@ class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _MenuHeader(onClose: () => context.go('/projects')),
+            _MenuHeader(
+              onClose: () => context.go('/projects'),
+              showLogout: authenticated,
+              onLogout: _logout,
+              showRefresh: authenticated,
+              onRefresh: index.refreshing ? null : _refreshExposed,
+            ),
             if (!authenticated)
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -113,28 +177,34 @@ class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  index.loadedFromCache && index.hasData
-                      ? 'Showing cached tree — refreshing in background'
-                      : index.hasData
-                          ? '${index.exposedFlat.length} exposed paths'
-                          : 'Loading exposed paths…',
+                  index.refreshing
+                      ? 'Refreshing exposed paths…'
+                      : index.loading
+                          ? 'Loading exposed paths…'
+                          : index.loadedFromCache && index.hasData
+                              ? 'Showing cached tree — refreshing in background'
+                              : index.hasData
+                                  ? '${index.exposedFlat.length} exposed paths'
+                                  : authenticated
+                                      ? 'No exposed folders found on server.'
+                                      : 'Authenticate to load folders.',
                   style: TextStyle(color: colors.fgMuted, fontSize: 11),
                 ),
               ),
             ),
             Expanded(
-              child: index.loading && !index.hasData
-                  ? const Center(child: CircularProgressIndicator())
-                  : index.exposedTree.isEmpty
-                      ? Center(
-                          child: Text(
-                            authenticated
-                                ? 'No exposed folders found on server.'
-                                : 'Authenticate to load folders.',
-                            style: TextStyle(color: colors.fgMuted),
-                          ),
-                        )
-                      : ListView(
+              child: index.exposedTree.isEmpty
+                  ? Center(
+                      child: Text(
+                        authenticated
+                            ? (index.loading || index.refreshing
+                                ? ''
+                                : 'No exposed folders found on server.')
+                            : 'Authenticate to load folders.',
+                        style: TextStyle(color: colors.fgMuted),
+                      ),
+                    )
+                  : ListView(
                           padding: const EdgeInsets.all(8),
                           children: [
                             for (final root in index.exposedTree)
@@ -165,13 +235,7 @@ class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
                     onPressed: _opening || _selectedPath == null
                         ? null
                         : _openSelected,
-                    child: _opening
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Open workspace'),
+                    child: const Text('Open workspace'),
                   ),
                 ],
               ),
@@ -258,9 +322,19 @@ class _RouteTreeTileState extends State<_RouteTreeTile> {
 }
 
 class _MenuHeader extends StatelessWidget {
-  const _MenuHeader({required this.onClose});
+  const _MenuHeader({
+    required this.onClose,
+    this.showLogout = false,
+    this.onLogout,
+    this.showRefresh = false,
+    this.onRefresh,
+  });
 
   final VoidCallback onClose;
+  final bool showLogout;
+  final VoidCallback? onLogout;
+  final bool showRefresh;
+  final VoidCallback? onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -279,6 +353,23 @@ class _MenuHeader extends StatelessWidget {
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ),
+          if (showRefresh && onRefresh != null)
+            IconButton(
+              onPressed: onRefresh,
+              icon: Icon(Icons.refresh, color: colors.fgMuted, size: 20),
+              tooltip: 'Refresh exposed paths',
+            ),
+          if (showLogout && onLogout != null)
+            TextButton(
+              onPressed: onLogout,
+              style: TextButton.styleFrom(
+                foregroundColor: colors.statusError,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 36),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Log Out'),
+            ),
           IconButton(
             onPressed: onClose,
             icon: Icon(Icons.close, color: colors.fgMuted),

@@ -4,9 +4,10 @@ import '../db/app_database.dart';
 import '../models/route_node.dart';
 import '../repositories/ide_repository.dart';
 import 'app_providers.dart';
+import 'global_loader_provider.dart';
 
 final ideRepositoryProvider = FutureProvider<IdeRepository>((ref) async {
-  final api = await ref.watch(apiClientProvider.future);
+  final api = ref.watch(apiClientProvider);
   return IdeRepository(api);
 });
 
@@ -72,8 +73,22 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
   @override
   IdeIndexState build() {
     ref.listen(sessionProvider, (previous, next) {
-      final wasReady = previous?.valueOrNull?.isReady ?? false;
-      final isReady = next.valueOrNull?.isReady ?? false;
+      if (next.isLoading) {
+        return;
+      }
+      final prevSession = previous?.valueOrNull;
+      final nextSession = next.valueOrNull;
+
+      final wasAuth = prevSession?.isAuthenticated ?? false;
+      final isAuth = nextSession?.isAuthenticated ?? false;
+      if (!wasAuth && isAuth) {
+        refreshExposed(background: state.hasData);
+      } else if (wasAuth && !isAuth) {
+        state = const IdeIndexState();
+      }
+
+      final wasReady = prevSession?.isReady ?? false;
+      final isReady = nextSession?.isReady ?? false;
       if (!wasReady && isReady) {
         refreshAll(background: state.hasData);
       }
@@ -142,11 +157,22 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
     }
   }
 
-  Future<void> refreshExposed({bool background = false}) async {
-    if (_refreshInFlight) {
+  Future<void> refreshExposed({
+    bool background = false,
+    bool force = false,
+    String? loaderMessage,
+  }) async {
+    if (_refreshInFlight && !force) {
       return;
     }
     _refreshInFlight = true;
+    final showLoader =
+        !background && (loaderMessage != null || !state.hasData);
+    final message = loaderMessage ?? 'Loading exposed paths…';
+    LoaderHandle? handle;
+    if (showLoader) {
+      handle = ref.read(globalLoaderProvider.notifier).acquire(message);
+    }
     state = state.copyWith(
       loading: !background && !state.hasData,
       refreshing: background || state.hasData,
@@ -177,10 +203,22 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
       );
     } finally {
       _refreshInFlight = false;
+      handle?.release();
     }
   }
 
-  Future<void> refreshWorkspace(int workspaceId, {bool background = false}) async {
+  Future<void> refreshWorkspace(
+    int workspaceId, {
+    bool background = false,
+    String? loaderMessage,
+  }) async {
+    final showLoader =
+        !background && (loaderMessage != null || !state.hasData);
+    final message = loaderMessage ?? 'Indexing workspace…';
+    LoaderHandle? handle;
+    if (showLoader) {
+      handle = ref.read(globalLoaderProvider.notifier).acquire(message);
+    }
     state = state.copyWith(
       loading: !background && !state.hasData,
       refreshing: background || state.hasData,
@@ -209,6 +247,8 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
         refreshing: false,
         error: state.hasData ? null : error.toString(),
       );
+    } finally {
+      handle?.release();
     }
   }
 

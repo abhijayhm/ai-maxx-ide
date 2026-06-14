@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'routing/app_router.dart';
 import 'theme/workbench_theme.dart';
+import 'widgets/global_loader_host.dart';
 
 class AiMaxxIdeApp extends ConsumerWidget {
   const AiMaxxIdeApp({super.key});
@@ -16,6 +17,9 @@ class AiMaxxIdeApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: buildWorkbenchTheme(),
       routerConfig: router,
+      builder: (context, child) {
+        return GlobalLoaderHost(child: child ?? const SizedBox.shrink());
+      },
     );
   }
 }

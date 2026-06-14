@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/agent_session.dart';
 import '../repositories/agent_repository.dart';
 import 'app_providers.dart';
+import 'global_loader_provider.dart';
 
 final agentRepositoryProvider = FutureProvider<AgentRepository>((ref) async {
-  final api = await ref.watch(apiClientProvider.future);
+  final api = ref.watch(apiClientProvider);
   return AgentRepository(api);
 });
 
@@ -91,22 +92,31 @@ class AgentSessionsNotifier extends Notifier<AgentSessionsState> {
   }
 
   Future<void> refresh() async {
+    final showLoader = state.sessions.isEmpty;
     state = state.copyWith(loading: true, clearError: true);
+    final handle = showLoader
+        ? ref.read(globalLoaderProvider.notifier).acquire('Loading agent sessions…')
+        : null;
     try {
       final repo = await ref.read(agentRepositoryProvider.future);
       final sessions = await repo.fetchSessions();
       state = state.copyWith(
         sessions: sessions,
         loading: false,
-        activeId: state.activeId ?? (sessions.isNotEmpty ? sessions.first.id : null),
+        activeId:
+            state.activeId ?? (sessions.isNotEmpty ? sessions.first.id : null),
       );
     } catch (error) {
       state = state.copyWith(loading: false, error: error.toString());
+    } finally {
+      handle?.release();
     }
   }
 
   Future<AgentSessionInfo?> createSession({bool select = true}) async {
     state = state.copyWith(loading: true, clearError: true);
+    final handle =
+        ref.read(globalLoaderProvider.notifier).acquire('Creating session…');
     try {
       final repo = await ref.read(agentRepositoryProvider.future);
       final created = await repo.createSession();
@@ -120,6 +130,8 @@ class AgentSessionsNotifier extends Notifier<AgentSessionsState> {
     } catch (error) {
       state = state.copyWith(loading: false, error: error.toString());
       return null;
+    } finally {
+      handle.release();
     }
   }
 

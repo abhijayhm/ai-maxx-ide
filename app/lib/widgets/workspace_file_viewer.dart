@@ -148,7 +148,7 @@ class _WorkspaceFileViewerState extends State<WorkspaceFileViewer> {
     final file = widget.file;
 
     if (file.loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox.shrink();
     }
     if (file.error != null) {
       return Center(
@@ -196,7 +196,7 @@ class _WorkspaceFileViewerState extends State<WorkspaceFileViewer> {
     final colors = context.workbenchColors;
     final tempPath = _binaryTempPath;
     if (tempPath == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox.shrink();
     }
 
     if (!kIsWeb && Platform.isIOS && _fileViewController != null) {

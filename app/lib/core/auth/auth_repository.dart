@@ -29,6 +29,7 @@ class AuthRepository {
   Future<SessionSnapshot> loadSession() async {
     final secureKey = await _secureStorage.read(key: _apiKeySetting);
     final dbKey = await _database.getSetting(_apiKeySetting);
+    final storedKey = secureKey ?? dbKey;
     final serverUrl = AppConfig.normalizeServerUrl(
       await _database.getSetting(_serverUrlSetting) ??
           AppConfig.defaultServerUrl,
@@ -36,10 +37,10 @@ class AuthRepository {
     final workspaceId = await _database.getSetting(_workspaceIdSetting);
     final registered =
         (await _database.getSetting(_registeredSetting)) == 'true';
-    final apiKey = secureKey ?? dbKey ?? AppConfig.defaultApiKey;
+    final apiKey = storedKey ?? '';
 
     _config.serverUrl = serverUrl;
-    _config.apiKey = apiKey;
+    _config.apiKey = apiKey.isNotEmpty ? apiKey : AppConfig.defaultApiKey;
     await _database.setSetting(_serverUrlSetting, serverUrl);
 
     final deviceHash = await _deviceIdentifier.computeHash();
@@ -50,10 +51,20 @@ class AuthRepository {
       deviceHash: deviceHash,
       isRegistered: registered,
       activeWorkspaceId: workspaceId,
+      hasStoredApiKey: storedKey != null && storedKey.isNotEmpty,
     );
   }
 
-  Future<SessionSnapshot> registerDevice(String apiKey) async {
+  Future<SessionSnapshot> registerDevice(
+    String apiKey, {
+    String? serverUrl,
+  }) async {
+    if (serverUrl != null && serverUrl.trim().isNotEmpty) {
+      final normalized = AppConfig.normalizeServerUrl(serverUrl);
+      _config.serverUrl = normalized;
+      await _database.setSetting(_serverUrlSetting, normalized);
+    }
+
     final deviceData = await _deviceIdentifier.collectDeviceData();
     final deviceHash = computeDeviceHash(deviceData);
 
@@ -79,6 +90,16 @@ class AuthRepository {
 
     await _database.setSetting(_registeredSetting, 'true');
 
+    return loadSession();
+  }
+
+  Future<SessionSnapshot> logout() async {
+    await _secureStorage.delete(key: _apiKeySetting);
+    await _database.setSetting(_apiKeySetting, null);
+    await _database.setSetting(_registeredSetting, null);
+    await _database.setSetting(_workspaceIdSetting, null);
+    await _database.setSetting(AppDatabase.lastWorkspacePathKey, null);
+    _config.apiKey = AppConfig.defaultApiKey;
     return loadSession();
   }
 
@@ -121,6 +142,7 @@ class SessionSnapshot {
     required this.deviceHash,
     required this.isRegistered,
     this.activeWorkspaceId,
+    this.hasStoredApiKey = false,
   });
 
   final String apiKey;
@@ -128,6 +150,7 @@ class SessionSnapshot {
   final String deviceHash;
   final bool isRegistered;
   final String? activeWorkspaceId;
+  final bool hasStoredApiKey;
 
   bool get isAuthenticated => isRegistered && apiKey.isNotEmpty;
 

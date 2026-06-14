@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/providers/global_loader_provider.dart';
 import '../../theme/workbench_colors.dart';
 
 Future<void> showAuthModal(BuildContext context, WidgetRef ref) {
@@ -26,6 +27,7 @@ class _AuthModalSheet extends ConsumerStatefulWidget {
 }
 
 class _AuthModalSheetState extends ConsumerState<_AuthModalSheet> {
+  late final TextEditingController _serverUrlController;
   late final TextEditingController _apiKeyController;
   bool _obscure = true;
   bool _submitting = false;
@@ -34,17 +36,47 @@ class _AuthModalSheetState extends ConsumerState<_AuthModalSheet> {
   @override
   void initState() {
     super.initState();
-    _apiKeyController = TextEditingController(text: AppConfig.defaultApiKey);
+    _serverUrlController = TextEditingController();
+    _apiKeyController = TextEditingController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prefillFields());
+  }
+
+  void _prefillFields() {
+    if (!mounted) {
+      return;
+    }
+    final session = ref.read(sessionProvider).valueOrNull;
+    final config = ref.read(appConfigProvider);
+
+    final serverUrl = session?.serverUrl.isNotEmpty == true
+        ? session!.serverUrl
+        : (config.serverUrl.isNotEmpty
+            ? config.serverUrl
+            : AppConfig.defaultServerUrl);
+    _serverUrlController.text = serverUrl;
+
+    if (session?.apiKey.isNotEmpty == true) {
+      _apiKeyController.text = session!.apiKey;
+    } else if (AppConfig.defaultApiKey.isNotEmpty) {
+      _apiKeyController.text = AppConfig.defaultApiKey;
+    }
   }
 
   @override
   void dispose() {
+    _serverUrlController.dispose();
     _apiKeyController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
+    final serverUrl = AppConfig.normalizeServerUrl(_serverUrlController.text);
     final apiKey = _apiKeyController.text.trim();
+
+    if (serverUrl.isEmpty || Uri.tryParse(serverUrl)?.host.isEmpty == true) {
+      setState(() => _error = 'Server URL is required.');
+      return;
+    }
     if (apiKey.isEmpty) {
       setState(() => _error = 'API key is required.');
       return;
@@ -54,10 +86,21 @@ class _AuthModalSheetState extends ConsumerState<_AuthModalSheet> {
       _submitting = true;
       _error = null;
     });
+    final handle =
+        ref.read(globalLoaderProvider.notifier).acquire('Authenticating…');
 
     try {
-      await ref.read(sessionProvider.notifier).register(apiKey);
-      if (mounted) {
+      await ref.read(sessionProvider.notifier).persistServerUrl(serverUrl);
+      await ref.read(sessionProvider.notifier).register(
+            apiKey,
+            serverUrl: serverUrl,
+          );
+      if (!mounted) {
+        return;
+      }
+      final authenticated =
+          ref.read(sessionProvider).valueOrNull?.isAuthenticated ?? false;
+      if (authenticated) {
         Navigator.of(context).pop();
       }
     } on DioException catch (error) {
@@ -70,6 +113,7 @@ class _AuthModalSheetState extends ConsumerState<_AuthModalSheet> {
     } catch (error) {
       setState(() => _error = error.toString());
     } finally {
+      handle.release();
       if (mounted) {
         setState(() => _submitting = false);
       }
@@ -78,6 +122,17 @@ class _AuthModalSheetState extends ConsumerState<_AuthModalSheet> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(sessionProvider, (previous, next) {
+      if (next.isLoading || _submitting) {
+        return;
+      }
+      final wasAuth = previous?.valueOrNull?.isAuthenticated ?? false;
+      final isAuth = next.valueOrNull?.isAuthenticated ?? false;
+      if (!wasAuth && isAuth && mounted) {
+        Navigator.of(context).pop();
+      }
+    });
+
     final colors = context.workbenchColors;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
@@ -96,10 +151,20 @@ class _AuthModalSheetState extends ConsumerState<_AuthModalSheet> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Paste the server API key. Defaults match the repo .env for development.',
+            'Set the server URL and API key. Defaults match the repo .env for development.',
             style: TextStyle(color: colors.fgMuted, fontSize: 13),
           ),
           const SizedBox(height: 16),
+          TextField(
+            controller: _serverUrlController,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            decoration: const InputDecoration(
+              labelText: 'Server URL',
+              hintText: 'https://aimaxx.organisationapp.online',
+            ),
+          ),
+          const SizedBox(height: 12),
           TextField(
             controller: _apiKeyController,
             obscureText: _obscure,
@@ -121,13 +186,7 @@ class _AuthModalSheetState extends ConsumerState<_AuthModalSheet> {
           const SizedBox(height: 20),
           ElevatedButton(
             onPressed: _submitting ? null : _submit,
-            child: _submitting
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Login'),
+            child: const Text('Login'),
           ),
         ],
       ),

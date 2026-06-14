@@ -6,6 +6,7 @@ import '../config/app_config.dart';
 import '../models/git_models.dart';
 import '../ws/ws_client.dart';
 import 'app_providers.dart';
+import 'global_loader_provider.dart';
 
 class GitState {
   const GitState({
@@ -57,6 +58,7 @@ class GitNotifier extends Notifier<GitState> {
   WsClient? _ws;
   StreamSubscription<Map<String, dynamic>>? _sub;
   Completer<Map<String, dynamic>>? _waiter;
+  LoaderHandle? _loader;
 
   @override
   GitState build() {
@@ -64,8 +66,15 @@ class GitNotifier extends Notifier<GitState> {
     return const GitState();
   }
 
+  void _releaseLoader() {
+    _loader?.release();
+    _loader = null;
+  }
+
   Future<void> refresh() async {
+    _releaseLoader();
     state = state.copyWith(loading: true, error: null);
+    _loader = ref.read(globalLoaderProvider.notifier).acquire('Loading git status…');
     try {
       await _send({'type': 'status'});
       final statusMsg = await _nextResponse(['status']);
@@ -98,6 +107,8 @@ class GitNotifier extends Notifier<GitState> {
       );
     } catch (error) {
       state = state.copyWith(loading: false, error: error.toString());
+    } finally {
+      _releaseLoader();
     }
   }
 
@@ -151,8 +162,11 @@ class GitNotifier extends Notifier<GitState> {
     final completer = Completer<Map<String, dynamic>>();
     _waiter = completer;
     final msg = await completer.future.timeout(const Duration(seconds: 30));
-    if (msg['type'] == 'error') {
+    if (msg['type'] == 'error' || msg['type'] == 'connection_error') {
       throw StateError(msg['message'] as String? ?? 'Git command failed');
+    }
+    if (msg['type'] == 'connection_closed') {
+      throw StateError('Git connection closed');
     }
     if (!types.contains(msg['type'])) {
       throw StateError('Unexpected git response: ${msg['type']}');
@@ -161,6 +175,20 @@ class GitNotifier extends Notifier<GitState> {
   }
 
   void _onFrame(Map<String, dynamic> frame) {
+    final type = frame['type'] as String? ?? '';
+    if (type == 'connection_closed' || type == 'connection_error') {
+      final waiter = _waiter;
+      if (waiter != null && !waiter.isCompleted) {
+        _waiter = null;
+        waiter.complete(frame);
+      }
+      if (state.loading) {
+        _releaseLoader();
+        state = state.copyWith(loading: false);
+      }
+      return;
+    }
+
     final waiter = _waiter;
     if (waiter != null && !waiter.isCompleted) {
       _waiter = null;
@@ -189,6 +217,7 @@ class GitNotifier extends Notifier<GitState> {
   }
 
   Future<void> _disconnect() async {
+    _releaseLoader();
     await _sub?.cancel();
     _sub = null;
     await _ws?.disconnect();
