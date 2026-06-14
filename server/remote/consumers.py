@@ -14,6 +14,8 @@ class RemoteConsumer(AsyncWebsocketConsumer):
         self.pc = None
         self._screen_track = None
         await self.accept()
+        if self.authenticated:
+            await self.send_json({"type": "auth_ok", "connected": True})
 
     async def disconnect(self, close_code):
         await close_peer(self.pc, self._screen_track)

@@ -1,5 +1,6 @@
 import asyncio
 
+from asgiref.sync import async_to_sync
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
@@ -12,14 +13,12 @@ from core.serializers import AgentMessageSerializer, AgentSessionSerializer
 
 
 def _run_async(coro):
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.ensure_future(coro)
-            return
-    except RuntimeError:
-        pass
-    asyncio.run(coro)
+    """Run async bridge code from sync DRF views under ASGI."""
+
+    async def wrapper():
+        await coro
+
+    async_to_sync(wrapper)()
 
 
 @api_view(["GET", "POST"])
@@ -46,7 +45,7 @@ def agent_sessions_view(request):
 @permission_classes([IsRegisteredDevice, RequiresWorkspace])
 def agent_models_view(request):
     workspace = get_workspace_from_request(request)
-    models = asyncio.run(list_models(workspace))
+    models = async_to_sync(list_models)(workspace)
     return Response(models)
 
 

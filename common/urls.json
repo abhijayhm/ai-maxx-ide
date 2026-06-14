@@ -13,13 +13,21 @@
     "devices_identifier": { "method": "POST", "path": "devices/identifier/", "auth": "api_key" },
     "exposed_routes_tree": { "method": "GET", "path": "exposed_routes_tree/", "auth": "device" },
     "workspace_open": { "method": "POST", "path": "workspaces/", "auth": "device" },
-    "workspace_tree": { "method": "GET", "path": "workspaces/{workspace_id}/tree/", "auth": "workspace" }
+    "workspace_tree": { "method": "GET", "path": "workspaces/{workspace_id}/tree/", "auth": "workspace" },
+    "terminals_list": { "method": "GET", "path": "terminals/", "auth": "workspace" },
+    "terminals_create": { "method": "POST", "path": "terminals/", "auth": "workspace" },
+    "terminals_detail": { "method": "GET", "path": "terminals/{terminal_id}/", "auth": "workspace" },
+    "terminals_delete": { "method": "DELETE", "path": "terminals/{terminal_id}/", "auth": "workspace" },
+    "terminals_exec": { "method": "POST", "path": "terminals/{terminal_id}/exec/", "auth": "workspace" },
+    "terminals_io": { "method": "GET", "path": "terminals/{terminal_id}/io/", "auth": "workspace" }
   },
   "websocket": {
     "watchdog": { "path": "watchdog/" },
     "ide_search": { "path": "ide_search/" },
     "getbypath": { "path": "getbypath/" },
     "git": { "path": "git/" },
-    "agent": { "path": "agent/" }
+    "agent": { "path": "agent/" },
+    "terminals": { "path": "terminals/{session_id}/" },
+    "remote": { "path": "remote/" }
   }
 }

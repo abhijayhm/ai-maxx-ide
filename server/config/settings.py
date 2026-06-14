@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "channels",
     "core",
     "ide",
+    "terminals",
 ]
 
 MIDDLEWARE = [
@@ -90,6 +91,8 @@ if _db["ENGINE"] == "django.db.backends.sqlite3":
         db_path = (REPO_ROOT / db_path).resolve()
         DATABASES["default"]["NAME"] = str(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    DATABASES["default"].setdefault("OPTIONS", {})
+    DATABASES["default"]["OPTIONS"]["timeout"] = 20
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

@@ -23,4 +23,5 @@ urlpatterns = [
         name="workspace-tree",
     ),
     path("", include("agents.urls")),
+    path("", include("terminals.urls")),
 ]

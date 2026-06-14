@@ -64,11 +64,30 @@ class FakePty:
 
 
 class SubprocessPty:
-    """Subprocess-based pseudo-terminal fallback."""
+    """Subprocess pipe fallback with a background reader (non-blocking reads)."""
 
     def __init__(self, proc: subprocess.Popen, pid: int):
         self._proc = proc
         self.pid = pid
+        self._buffer = bytearray()
+        self._lock = threading.Lock()
+        self._alive = True
+        self._reader = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader.start()
+
+    def _read_loop(self) -> None:
+        stdout = self._proc.stdout
+        while self._alive and self._proc.poll() is None and stdout is not None:
+            try:
+                chunk = stdout.read(4096)
+            except (OSError, ValueError):
+                break
+            if chunk:
+                with self._lock:
+                    self._buffer.extend(chunk)
+            else:
+                time.sleep(0.05)
+        self._alive = False
 
     def write(self, data: bytes) -> None:
         if self._proc.stdin:
@@ -76,17 +95,21 @@ class SubprocessPty:
             self._proc.stdin.flush()
 
     def read(self, size: int = 4096) -> bytes:
-        if self._proc.stdout:
-            return self._proc.stdout.read(size) or b""
+        with self._lock:
+            if self._buffer:
+                out = bytes(self._buffer[:size])
+                del self._buffer[: len(out)]
+                return out
         return b""
 
     def set_size(self, cols: int, rows: int) -> None:
         pass
 
     def isalive(self) -> bool:
-        return self._proc.poll() is None
+        return self._alive and self._proc.poll() is None
 
     def kill(self) -> None:
+        self._alive = False
         self._proc.kill()
         try:
             self._proc.wait(timeout=5)
@@ -127,9 +150,9 @@ class PtyManager:
             pass
 
         if shell == "powershell":
-            cmd = ["powershell", "-NoProfile", "-Command", "-"]
+            cmd = ["powershell.exe", "-NoLogo", "-NoProfile"]
         elif shell == "cmd":
-            cmd = ["cmd"]
+            cmd = ["cmd.exe"]
         else:
             cmd = [shell]
 

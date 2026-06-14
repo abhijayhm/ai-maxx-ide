@@ -25,3 +25,28 @@ class Terminal(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.status})"
+
+
+class TerminalIODirection(models.TextChoices):
+    INPUT = "input", "Input"
+    OUTPUT = "output", "Output"
+
+
+class TerminalIO(models.Model):
+    """Persisted terminal stream chunks (like AgentMessage for sessions)."""
+
+    terminal = models.ForeignKey(
+        Terminal, on_delete=models.CASCADE, related_name="io_lines"
+    )
+    direction = models.CharField(max_length=8, choices=TerminalIODirection.choices)
+    data = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["terminal", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.direction}@{self.created_at}"

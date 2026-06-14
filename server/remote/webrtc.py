@@ -25,12 +25,21 @@ async def handle_offer(send_json: SendJson, sdp: str) -> tuple[Any | None, Any |
         await send_json({"type": "connected"})
         return None, None
 
+    if not sdp or not sdp.strip():
+        await send_json(
+            {
+                "type": "error",
+                "code": "invalid_offer",
+                "message": "Missing SDP in offer",
+            }
+        )
+        return None, None
+
     from aiortc import RTCPeerConnection, RTCSessionDescription
     from aiortc.sdp import candidate_to_sdp
 
     pc = RTCPeerConnection()
     screen_track = create_screen_track()
-    pc.addTrack(screen_track)
 
     @pc.on("icecandidate")
     async def on_icecandidate(event) -> None:
@@ -47,10 +56,23 @@ async def handle_offer(send_json: SendJson, sdp: str) -> tuple[Any | None, Any |
             }
         )
 
-    offer = RTCSessionDescription(sdp=sdp, type="offer")
-    await pc.setRemoteDescription(offer)
-    answer = await pc.createAnswer()
-    await pc.setLocalDescription(answer)
+    try:
+        offer = RTCSessionDescription(sdp=sdp, type="offer")
+        await pc.setRemoteDescription(offer)
+        pc.addTrack(screen_track)
+        answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
+    except Exception as exc:
+        logger.exception("WebRTC offer handling failed")
+        await close_peer(pc, screen_track)
+        await send_json(
+            {
+                "type": "error",
+                "code": "webrtc_failed",
+                "message": str(exc),
+            }
+        )
+        return None, None
 
     await send_json({"type": "answer", "sdp": pc.localDescription.sdp})
     await send_json({"type": "connected"})

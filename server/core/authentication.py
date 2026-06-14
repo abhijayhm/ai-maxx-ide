@@ -33,6 +33,5 @@ class DeviceAPIKeyAuthentication(authentication.BaseAuthentication):
                 detail="Device not registered.", code="device_not_registered"
             ) from exc
 
-        device.save(update_fields=["last_seen_at"])
         request.device = device
         return (device, None)

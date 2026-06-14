@@ -11,6 +11,7 @@ class RemoteWebRtcSession {
 
   final SignalingSend onSignalingSend;
   VoidCallback? onVideoTrack;
+  VoidCallback? onConnectionFailed;
 
   final RTCVideoRenderer renderer = RTCVideoRenderer();
   RTCPeerConnection? _peerConnection;
@@ -40,6 +41,7 @@ class RemoteWebRtcSession {
       'sdpSemantics': 'unified-plan',
       'iceServers': [
         {'urls': 'stun:stun.l.google.com:19302'},
+        {'urls': 'stun:stun1.l.google.com:19302'},
       ],
     });
 
@@ -66,12 +68,20 @@ class RemoteWebRtcSession {
 
     _peerConnection!.onConnectionState = (state) {
       debugPrint('Remote WebRTC state: $state');
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+          state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+        onConnectionFailed?.call();
+      }
     };
 
-    final offer = await _peerConnection!.createOffer({
-      'offerToReceiveVideo': true,
-      'offerToReceiveAudio': false,
-    });
+    await _peerConnection!.addTransceiver(
+      kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
+      init: RTCRtpTransceiverInit(
+        direction: TransceiverDirection.RecvOnly,
+      ),
+    );
+
+    final offer = await _peerConnection!.createOffer();
     await _peerConnection!.setLocalDescription(offer);
     onSignalingSend({'type': 'offer', 'sdp': offer.sdp});
   }

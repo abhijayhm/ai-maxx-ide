@@ -5,6 +5,7 @@ import json
 from django.conf import settings
 from django.http import JsonResponse
 
+from core.device_activity import touch_device
 from core.models import DeviceIdentifier
 
 PUBLIC_PATHS = (
@@ -71,7 +72,7 @@ class DeviceAuthMiddleware:
                 status=403,
             )
 
-        device.save(update_fields=["last_seen_at"])
+        touch_device(device)
         request.device = device
         request.auth_device = device
         return self.get_response(request)

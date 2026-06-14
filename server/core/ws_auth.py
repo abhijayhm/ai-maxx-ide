@@ -5,6 +5,7 @@ from urllib.parse import parse_qs
 from channels.db import database_sync_to_async
 from django.conf import settings
 
+from core.device_activity import touch_device
 from core.models import DeviceIdentifier, Workspace
 
 
@@ -28,7 +29,7 @@ def _get_workspace(workspace_id, device):
 
 @database_sync_to_async
 def _touch_device(device):
-    device.save(update_fields=["last_seen_at"])
+    touch_device(device)
 
 
 class DeviceAuthWsMiddleware:

@@ -1,3 +1,4 @@
+import base64
 import json
 from datetime import timedelta
 
@@ -85,6 +86,73 @@ async def test_terminal_ws_attach(api_key, registered_device, workspace, device_
     assert response["shell"] == "powershell"
 
     await communicator.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_terminal_ws_io_persisted(
+    api_key, registered_device, workspace, device_hash, terminal, monkeypatch
+):
+    monkeypatch.setenv("TERMINAL_PTY_BACKEND", "fake")
+    url = (
+        f"/api/ws/terminals/{terminal.id}/?"
+        f"api_key={api_key}&device_hash={device_hash}&workspace_id={workspace.id}"
+    )
+    communicator = WebsocketCommunicator(application, url)
+    connected, _ = await communicator.connect()
+    assert connected
+
+    response = await communicator.receive_json_from(timeout=5)
+    assert response["type"] == "attached"
+
+    await communicator.send_json_to(
+        {"type": "input", "data": base64.b64encode(b"echo test\r\n").decode("ascii")}
+    )
+
+    got_output = False
+    for _ in range(20):
+        response = await communicator.receive_json_from(timeout=5)
+        if response["type"] == "output" and response.get("data"):
+            got_output = True
+            break
+    assert got_output
+
+    await communicator.disconnect()
+
+    from channels.db import database_sync_to_async
+    from terminals.models import TerminalIO, TerminalIODirection
+
+    @database_sync_to_async
+    def _io_exists():
+        return (
+            TerminalIO.objects.filter(
+                terminal=terminal, direction=TerminalIODirection.INPUT
+            ).exists(),
+            TerminalIO.objects.filter(
+                terminal=terminal, direction=TerminalIODirection.OUTPUT
+            ).exists(),
+        )
+
+    has_input, has_output = await _io_exists()
+    assert has_input
+    assert has_output
+
+
+@pytest.mark.django_db
+def test_terminal_io_list(workspace_client, terminal):
+    from terminals.models import TerminalIO, TerminalIODirection
+
+    TerminalIO.objects.create(
+        terminal=terminal,
+        direction=TerminalIODirection.OUTPUT,
+        data="aGVsbG8=",
+    )
+    resp = workspace_client.get(f"/api/terminals/{terminal.id}/io/")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["direction"] == "output"
+    assert body[0]["data"] == "aGVsbG8="
 
 
 @pytest.mark.django_db(transaction=True)

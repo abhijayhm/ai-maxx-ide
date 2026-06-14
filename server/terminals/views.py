@@ -10,8 +10,9 @@ from core.authentication import DeviceAPIKeyAuthentication
 from core.exceptions import error_response
 from core.permissions import IsRegisteredDevice, RequiresWorkspace, get_workspace_from_request
 from core.utils.paths import PathNotAllowedError, resolve_allowed_path
-from terminals.models import Terminal, TerminalStatus
+from terminals.models import Terminal, TerminalIO, TerminalStatus
 from terminals.pty_manager import PtyManager
+from terminals.serializers import TerminalIOSerializer
 from terminals.services import close_stale_terminals
 
 
@@ -177,3 +178,22 @@ def terminal_exec_view(request, terminal_id):
             },
             status=status.HTTP_408_REQUEST_TIMEOUT,
         )
+
+
+@api_view(["GET"])
+@authentication_classes([DeviceAPIKeyAuthentication])
+@permission_classes([IsRegisteredDevice, RequiresWorkspace])
+def terminal_io_view(request, terminal_id):
+    device = request.user
+    workspace = get_workspace_from_request(request)
+
+    try:
+        terminal = Terminal.objects.get(id=terminal_id, device=device, workspace=workspace)
+    except Terminal.DoesNotExist:
+        return error_response("not_found", "Terminal not found.", status.HTTP_404_NOT_FOUND)
+
+    qs = TerminalIO.objects.filter(terminal=terminal).order_by("created_at")
+    limit = int(request.query_params.get("limit", 500))
+    offset = int(request.query_params.get("offset", 0))
+    lines = qs[offset : offset + limit]
+    return Response(TerminalIOSerializer(lines, many=True).data)

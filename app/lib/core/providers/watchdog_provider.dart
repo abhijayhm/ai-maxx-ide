@@ -58,7 +58,7 @@ class WatchdogNotifier extends Notifier<bool> {
       return;
     }
     if (event == 'created' || event == 'deleted') {
-      unawaited(ref.read(ideIndexProvider.notifier).refreshAfterWatchdog());
+      ref.read(ideIndexProvider.notifier).refreshAfterWatchdog();
     }
   }
 

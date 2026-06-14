@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../db/app_database.dart';
@@ -68,10 +70,15 @@ final ideIndexProvider =
 
 class IdeIndexNotifier extends Notifier<IdeIndexState> {
   bool _hydrated = false;
-  bool _refreshInFlight = false;
+  Future<void>? _exposedRefreshFuture;
+  final Map<int, Future<void>> _workspaceRefreshFutures = {};
+  Timer? _watchdogDebounce;
 
   @override
   IdeIndexState build() {
+    ref.onDispose(() {
+      _watchdogDebounce?.cancel();
+    });
     ref.listen(sessionProvider, (previous, next) {
       if (next.isLoading) {
         return;
@@ -81,16 +88,19 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
 
       final wasAuth = prevSession?.isAuthenticated ?? false;
       final isAuth = nextSession?.isAuthenticated ?? false;
-      if (!wasAuth && isAuth) {
-        _refreshInFlight = false;
-      } else if (wasAuth && !isAuth) {
+      if (wasAuth && !isAuth) {
         state = const IdeIndexState();
+        _exposedRefreshFuture = null;
+        _workspaceRefreshFutures.clear();
+        return;
       }
 
       final wasReady = prevSession?.isReady ?? false;
       final isReady = nextSession?.isReady ?? false;
       if (!wasReady && isReady) {
-        refreshAll(background: state.hasData);
+        unawaited(refreshAll(background: state.hasData));
+      } else if (!wasAuth && isAuth) {
+        unawaited(refreshExposed(background: state.hasData));
       }
     });
     Future.microtask(_hydrateFromCache);
@@ -144,7 +154,6 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
   }
 
   Future<void> forceRefresh() async {
-    _refreshInFlight = false;
     await refreshAll(background: state.hasData);
   }
 
@@ -162,10 +171,28 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
     bool force = false,
     String? loaderMessage,
   }) async {
-    if (_refreshInFlight && !force) {
-      return;
+    if (_exposedRefreshFuture != null) {
+      if (!force) {
+        return _exposedRefreshFuture;
+      }
+      await _exposedRefreshFuture;
     }
-    _refreshInFlight = true;
+
+    _exposedRefreshFuture = _refreshExposedImpl(
+      background: background,
+      loaderMessage: loaderMessage,
+    );
+    try {
+      await _exposedRefreshFuture;
+    } finally {
+      _exposedRefreshFuture = null;
+    }
+  }
+
+  Future<void> _refreshExposedImpl({
+    required bool background,
+    String? loaderMessage,
+  }) async {
     final showLoader =
         !background && (loaderMessage != null || !state.hasData);
     final message = loaderMessage ?? 'Loading exposed paths…';
@@ -212,7 +239,6 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
         error: state.hasData ? null : error.toString(),
       );
     } finally {
-      _refreshInFlight = false;
       handle?.release();
     }
   }
@@ -220,6 +246,29 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
   Future<void> refreshWorkspace(
     int workspaceId, {
     bool background = false,
+    String? loaderMessage,
+  }) async {
+    final inFlight = _workspaceRefreshFutures[workspaceId];
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final future = _refreshWorkspaceImpl(
+      workspaceId,
+      background: background,
+      loaderMessage: loaderMessage,
+    );
+    _workspaceRefreshFutures[workspaceId] = future;
+    try {
+      await future;
+    } finally {
+      _workspaceRefreshFutures.remove(workspaceId);
+    }
+  }
+
+  Future<void> _refreshWorkspaceImpl(
+    int workspaceId, {
+    required bool background,
     String? loaderMessage,
   }) async {
     final showLoader =
@@ -262,12 +311,15 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
     }
   }
 
-  Future<void> refreshAfterWatchdog() async {
-    await refreshExposed(background: true);
-    final session = ref.read(sessionProvider).valueOrNull;
-    final workspaceId = int.tryParse(session?.activeWorkspaceId ?? '');
-    if (workspaceId != null) {
-      await refreshWorkspace(workspaceId, background: true);
-    }
+  void refreshAfterWatchdog() {
+    _watchdogDebounce?.cancel();
+    _watchdogDebounce = Timer(const Duration(milliseconds: 800), () {
+      unawaited(refreshExposed(background: true));
+      final session = ref.read(sessionProvider).valueOrNull;
+      final workspaceId = int.tryParse(session?.activeWorkspaceId ?? '');
+      if (workspaceId != null) {
+        unawaited(refreshWorkspace(workspaceId, background: true));
+      }
+    });
   }
 }

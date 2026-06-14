@@ -1,10 +1,15 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
 import '../config/app_config.dart';
 import '../ws/ws_client.dart';
 import 'remote_webrtc.dart';
+
+typedef RemoteStateCallback = void Function({
+  bool? connected,
+  bool? videoReady,
+  String? error,
+  bool clearError,
+});
 
 /// Remote desktop WebSocket + WebRTC client (`/api/ws/remote/`).
 class RemoteClient {
@@ -16,11 +21,18 @@ class RemoteClient {
     _webrtc = RemoteWebRtcSession(onSignalingSend: _ws.send);
     _webrtc.onVideoTrack = () {
       _videoReady = true;
-      onStateChanged?.call();
+      _notify(clearError: true);
+    };
+    _webrtc.onConnectionFailed = () {
+      _notify(
+        error:
+            'WebRTC peer connection failed. If using a tunnel, video may need '
+            'a direct LAN route or TURN server.',
+      );
     };
   }
 
-  final VoidCallback? onStateChanged;
+  final RemoteStateCallback? onStateChanged;
 
   final WsClient _ws;
   late final RemoteWebRtcSession _webrtc;
@@ -35,11 +47,21 @@ class RemoteClient {
   int get stagedCount => _stagedCount;
   Stream<Map<String, dynamic>> get messages => _ws.messages;
 
+  void _notify({String? error, bool clearError = false}) {
+    onStateChanged?.call(
+      connected: _connected,
+      videoReady: _videoReady,
+      error: error,
+      clearError: clearError,
+    );
+  }
+
   Future<void> connect() async {
     await _webrtc.initialize();
     await _ws.connect('remote/');
     _sub ??= _ws.messages.listen(_onFrame);
     await _webrtc.startNegotiation();
+    _notify(clearError: true);
   }
 
   void _onFrame(Map<String, dynamic> frame) {
@@ -50,17 +72,29 @@ class RemoteClient {
     final type = frame['type'] as String? ?? '';
     if (type == 'auth_ok' || type == 'connected') {
       _connected = true;
+      _notify(clearError: true);
     } else if (type == 'input_staged') {
       _stagedCount = frame['count'] as int? ?? _stagedCount;
+      _notify();
     } else if (type == 'staging_cleared') {
       _stagedCount = 0;
+      _notify();
     } else if (type == 'answer' || type == 'ice_candidate') {
       await _webrtc.handleSignalingFrame(frame);
       if (_webrtc.videoReady) {
         _videoReady = true;
       }
+      _notify(clearError: true);
     } else if (type == 'error') {
       _connected = false;
+      _videoReady = false;
+      final code = frame['code'] as String? ?? 'error';
+      final message = frame['message'] as String? ?? 'Remote error';
+      _notify(error: '$code: $message');
+    } else if (type == 'connection_closed') {
+      _connected = false;
+      _videoReady = false;
+      _notify(error: 'Remote WebSocket closed');
     }
   }
 
@@ -113,6 +147,24 @@ class RemoteClient {
         {'op': 'key_combo', 'keys': [key]},
       ],
       'dispatch': false,
+    });
+  }
+
+  void sendKeyInput(
+    String value, {
+    Set<String> modifiers = const {},
+    bool dispatch = true,
+  }) {
+    final keys = [
+      ...modifiers.map((m) => m.toLowerCase()),
+      value,
+    ];
+    _ws.send({
+      'type': 'input_batch',
+      'events': [
+        {'op': 'key_combo', 'keys': keys},
+      ],
+      'dispatch': dispatch,
     });
   }
 

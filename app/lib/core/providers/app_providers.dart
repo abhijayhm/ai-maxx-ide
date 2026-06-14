@@ -12,6 +12,8 @@ import 'watchdog_provider.dart';
 import 'agent_session_provider.dart';
 import 'composer_settings_provider.dart';
 import 'global_loader_provider.dart';
+import 'terminals_provider.dart';
+import 'remote_provider.dart';
 
 final appConfigProvider = Provider<AppConfig>((ref) => AppConfig());
 
@@ -187,6 +189,8 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
     final snapshot = await auth.logout();
     state = AsyncData(snapshot);
     await ref.read(watchdogProvider.notifier).disconnect();
+    await ref.read(terminalsProvider.notifier).disconnect();
+    await ref.read(remoteProvider.notifier).disconnect();
     ref.read(globalLoaderProvider.notifier).reset();
     ref.read(ideFileProvider.notifier).close();
     ref.read(ideSearchProvider.notifier).search('');
@@ -235,7 +239,6 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
     await ref.read(watchdogProvider.notifier).connect(session: snapshot);
     await ref.read(ideIndexProvider.notifier).refreshExposed(
           background: ref.read(ideIndexProvider).hasData,
-          force: true,
         );
     if (snapshot.isReady) {
       await ref.read(agentSessionsProvider.notifier).ensureDefaultSession();

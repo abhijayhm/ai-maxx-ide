@@ -177,17 +177,7 @@ class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  index.refreshing
-                      ? 'Refreshing exposed paths…'
-                      : index.loading
-                          ? 'Loading exposed paths…'
-                          : index.loadedFromCache && index.hasData
-                              ? 'Showing cached tree — refreshing in background'
-                              : index.hasData
-                                  ? '${index.exposedFlat.length} exposed paths'
-                                  : authenticated
-                                      ? 'No exposed folders found on server.'
-                                      : 'Authenticate to load folders.',
+                  _indexStatusText(index, authenticated),
                   style: TextStyle(color: colors.fgMuted, fontSize: 11),
                 ),
               ),
@@ -245,6 +235,25 @@ class _WorkspaceMenuScreenState extends ConsumerState<WorkspaceMenuScreen> {
       ),
     );
   }
+}
+
+String _indexStatusText(IdeIndexState index, bool authenticated) {
+  if (index.refreshing) {
+    return 'Syncing paths…';
+  }
+  if (index.loading) {
+    return 'Loading exposed paths…';
+  }
+  if (index.loadedFromCache && index.hasData) {
+    return 'Showing cached tree';
+  }
+  if (index.hasData) {
+    return '${index.exposedFlat.length} exposed paths';
+  }
+  if (authenticated) {
+    return 'No exposed folders found on server.';
+  }
+  return 'Authenticate to load folders.';
 }
 
 class _RouteTreeTile extends StatefulWidget {

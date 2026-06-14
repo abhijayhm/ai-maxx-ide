@@ -5,6 +5,7 @@ from rest_framework.test import APIClient
 
 from core.models import DeviceIdentifier, Workspace
 from core.utils.hashing import compute_device_hash
+from terminals.models import Terminal, TerminalStatus
 
 
 @pytest.fixture
@@ -67,6 +68,37 @@ def workspace_client(api_client, workspace):
         HTTP_X_WORKSPACE_ID=str(workspace.id),
     )
     return api_client
+
+
+@pytest.fixture
+def terminal(db, registered_device, workspace):
+    return Terminal.objects.create(
+        device=registered_device,
+        workspace=workspace,
+        name="test-terminal",
+        shell="powershell",
+        cwd=workspace.absolute_path,
+        cols=80,
+        rows=24,
+        status=TerminalStatus.ACTIVE,
+    )
+
+
+@pytest.fixture
+def closed_terminal(db, registered_device, workspace):
+    return Terminal.objects.create(
+        device=registered_device,
+        workspace=workspace,
+        name="closed-terminal",
+        shell="powershell",
+        cwd=workspace.absolute_path,
+        status=TerminalStatus.CLOSED,
+    )
+
+
+@pytest.fixture(autouse=True)
+def terminal_fake_pty(monkeypatch):
+    monkeypatch.setenv("TERMINAL_PTY_BACKEND", "fake")
 
 
 @pytest.fixture(autouse=True)
