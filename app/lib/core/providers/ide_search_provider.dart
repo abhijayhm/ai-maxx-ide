@@ -25,14 +25,16 @@ class GrepMatch {
 
   factory GrepMatch.fromFrame(Map<String, dynamic> frame) {
     final matches = frame['matches'] as List<dynamic>? ?? [];
-    final first = matches.isNotEmpty ? matches.first as Map<String, dynamic> : {};
+    final first =
+        matches.isNotEmpty ? matches.first as Map<String, dynamic> : {};
     return GrepMatch(
       path: frame['path'] as String? ?? '',
       asset: frame['asset'] as String? ?? '',
-      line: first['line'] as int? ?? 0,
-      startIndex: first['start_index'] as int? ?? 0,
-      endIndex: first['end_index'] as int? ?? 0,
-      text: first['text'] as String? ?? '',
+      line: frame['line'] as int? ?? first['line'] as int? ?? 0,
+      startIndex:
+          frame['start_index'] as int? ?? first['start_index'] as int? ?? 0,
+      endIndex: frame['end_index'] as int? ?? first['end_index'] as int? ?? 0,
+      text: frame['text'] as String? ?? first['text'] as String? ?? '',
     );
   }
 }
@@ -90,6 +92,9 @@ class IdeSearchNotifier extends Notifier<IdeSearchState> {
     }
 
     await _ensureConnected(session);
+    if (state.searching) {
+      _ws!.send({'type': 'cancel'});
+    }
     state = state.copyWith(searching: true, results: const [], clearError: true);
 
     _ws!.send({

@@ -33,10 +33,11 @@ def test_stream_ide_search_finds_keyword(tmp_path):
             match_exact=False,
         )
     )
-    assert len(results) == 1
-    assert results[0]["asset"] == "main.py"
-    assert len(results[0]["matches"]) >= 2
-    assert results[0]["matches"][0]["start_index"] >= 0
+    assert len(results) >= 2
+    assert all(r["asset"] == "main.py" for r in results)
+    assert results[0]["line"] >= 1
+    assert results[0]["start_index"] >= 0
+    assert results[0]["text"]
 
 
 def test_stream_ide_search_respects_include_glob(tmp_path):

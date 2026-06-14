@@ -56,7 +56,8 @@ class AgentResponsesPanel extends StatelessWidget {
 
         final event = messages[index];
         final text = event.text ?? '';
-        final isCommand = event.type == AgentEventType.message;
+        final isUser =
+            event.type == AgentEventType.stream && event.raw.isEmpty;
 
         if (text.isEmpty) {
           return const SizedBox.shrink();
@@ -66,7 +67,7 @@ class AgentResponsesPanel extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: isCommand ? colors.aiCommandBg : colors.elevated,
+            color: isUser ? colors.aiCommandBg : colors.elevated,
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: colors.borderSubtle),
           ),
@@ -75,7 +76,7 @@ class AgentResponsesPanel extends StatelessWidget {
             style: workbenchMonoStyle(
               context,
               size: 13,
-              color: isCommand ? colors.aiCommandFg : colors.fgDefault,
+              color: isUser ? colors.aiCommandFg : colors.fgDefault,
             ),
           ),
         );

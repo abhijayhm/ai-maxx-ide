@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/route_node.dart';
 import '../../core/providers/agent_provider.dart';
+import '../../core/providers/ide_file_provider.dart';
 import '../../core/providers/ide_index_provider.dart';
 import '../../core/providers/ide_search_provider.dart';
 import '../../theme/workbench_colors.dart';
@@ -13,6 +14,7 @@ import '../../widgets/agent_responses_panel.dart';
 import '../../widgets/composer_card.dart';
 import '../../widgets/segmented_toggle.dart';
 import '../../widgets/workbench_search_field.dart';
+import '../../widgets/workspace_file_viewer.dart';
 
 class ProjectsScreen extends ConsumerStatefulWidget {
   const ProjectsScreen({super.key});
@@ -51,6 +53,23 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     });
   }
 
+  void _openFile(String path) {
+    ref.read(ideFileProvider.notifier).open(path);
+  }
+
+  void _closeFile() {
+    ref.read(ideFileProvider.notifier).close();
+  }
+
+  void _sendComposer() {
+    final text = _composerController.text.trim();
+    if (text.isEmpty) {
+      return;
+    }
+    ref.read(agentProvider.notifier).send(text);
+    _composerController.clear();
+  }
+
   bool get _isSearching => _query.trim().isNotEmpty;
 
   @override
@@ -59,13 +78,15 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     final index = ref.watch(ideIndexProvider);
     final grep = ref.watch(ideSearchProvider);
     final agent = ref.watch(agentProvider);
+    final openFile = ref.watch(ideFileProvider);
 
     final fileHits = _searchMode == 0
         ? searchByName(index.searchable, _debouncedQuery)
         : <RouteNode>[];
 
-    final resultsFlex = _isSearching ? 3 : 2;
-    final agentFlex = _isSearching ? 0 : 3;
+    final fileOpen = openFile.isOpen;
+    final resultsFlex = fileOpen ? 4 : (_isSearching ? 3 : 2);
+    final agentFlex = (fileOpen || _isSearching) ? 0 : 3;
 
     return ColoredBox(
       color: colors.canvas,
@@ -123,19 +144,35 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
           const SizedBox(height: 8),
           Expanded(
             flex: resultsFlex == 0 ? 1 : resultsFlex,
-            child: _isSearching
-                ? (_searchMode == 0
-                    ? _FileResultsList(files: fileHits, query: _query)
-                    : _GrepResultsList(grep: grep, query: _query))
-                : Center(
-                    child: Text(
-                      index.loading
-                          ? 'Loading workspace index…'
-                          : 'Type to search indexed files by name.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: colors.fgMuted, fontSize: 13),
-                    ),
-                  ),
+            child: fileOpen
+                ? WorkspaceFileViewer(
+                    file: openFile,
+                    onClose: _closeFile,
+                    onPickRange: (contextRef) {
+                      ref.read(agentProvider.notifier).sendContextRef(contextRef);
+                    },
+                  )
+                : _isSearching
+                    ? (_searchMode == 0
+                        ? _FileResultsList(
+                            files: fileHits,
+                            query: _query,
+                            onOpen: _openFile,
+                          )
+                        : _GrepResultsList(
+                            grep: grep,
+                            query: _query,
+                            onOpen: _openFile,
+                          ))
+                    : Center(
+                        child: Text(
+                          index.loading
+                              ? 'Loading workspace index…'
+                              : 'Type to search indexed files by name.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: colors.fgMuted, fontSize: 13),
+                        ),
+                      ),
           ),
           if (agentFlex > 0)
             Expanded(
@@ -154,8 +191,10 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
           ComposerCard(
             controller: _composerController,
             running: agent.running,
-            onSend: () {},
-            onStop: null,
+            onSend: _sendComposer,
+            onStop: agent.running
+                ? () => ref.read(agentProvider.notifier).stop()
+                : null,
           ),
         ],
       ),
@@ -164,10 +203,15 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
 }
 
 class _FileResultsList extends StatelessWidget {
-  const _FileResultsList({required this.files, required this.query});
+  const _FileResultsList({
+    required this.files,
+    required this.query,
+    required this.onOpen,
+  });
 
   final List<RouteNode> files;
   final String query;
+  final void Function(String path) onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -188,6 +232,7 @@ class _FileResultsList extends StatelessWidget {
         final file = files[index];
         return ListTile(
           dense: true,
+          onTap: () => onOpen(file.path),
           title: Text(file.asset, style: workbenchMonoStyle(context, size: 13)),
           subtitle: Text(
             file.path,
@@ -202,10 +247,15 @@ class _FileResultsList extends StatelessWidget {
 }
 
 class _GrepResultsList extends StatelessWidget {
-  const _GrepResultsList({required this.grep, required this.query});
+  const _GrepResultsList({
+    required this.grep,
+    required this.query,
+    required this.onOpen,
+  });
 
   final IdeSearchState grep;
   final String query;
+  final void Function(String path) onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -234,6 +284,7 @@ class _GrepResultsList extends StatelessWidget {
         final hit = grep.results[index];
         return ListTile(
           dense: true,
+          onTap: () => onOpen(hit.path),
           title: Text(hit.asset, style: workbenchMonoStyle(context, size: 13)),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

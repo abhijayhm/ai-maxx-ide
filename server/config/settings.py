@@ -15,6 +15,7 @@ env = environ.Env(
     TERMINAL_IDLE_TTL=(int, 3600),
     REMOTE_INPUT_ENABLED=(bool, True),
     REMOTE_WEBRTC_STUB=(bool, False),
+    WS_MAX_MESSAGE_BYTES=(int, 4 * 1024 * 1024),
 )
 
 environ.Env.read_env(REPO_ROOT / ".env")
@@ -132,3 +133,5 @@ else:
 FILE_SYNC_INLINE_MAX_BYTES = 1_048_576
 # Max paths per batch content request during background sync phase 2
 SYNC_FILES_BATCH_MAX_PATHS = 32
+# Outgoing WebSocket JSON frames should stay below this (chunk file/search payloads).
+WS_MAX_MESSAGE_BYTES = env("WS_MAX_MESSAGE_BYTES")

@@ -18,6 +18,8 @@
   "websocket": {
     "watchdog": { "path": "watchdog/" },
     "ide_search": { "path": "ide_search/" },
-    "git": { "path": "git/" }
+    "getbypath": { "path": "getbypath/" },
+    "git": { "path": "git/" },
+    "agent": { "path": "agent/" }
   }
 }

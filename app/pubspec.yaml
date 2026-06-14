@@ -24,6 +24,10 @@ dependencies:
   google_fonts: ^6.2.1
   path: ^1.9.1
   flutter_webrtc: ^1.2.0
+  flutter_code_editor: ^0.3.5
+  flutter_highlight: ^0.7.0
+  highlight: ^0.7.0
+  in_app_file_view: ^1.1.1
 
 dev_dependencies:
   flutter_test:

@@ -10,6 +10,8 @@ import ahocorasick
 
 _SKIP_DIR_NAMES = {".git", "__pycache__", "node_modules", ".dart_tool", "build", ".venv", "venv"}
 _MAX_FILE_BYTES = 2 * 1024 * 1024  # 2 MB per file
+_MAX_MATCHES_PER_FILE = 200
+_MAX_LINE_PREVIEW_CHARS = 400
 _TEXT_SUFFIXES = {
     ".py", ".dart", ".js", ".ts", ".tsx", ".jsx", ".json", ".md", ".txt", ".yaml", ".yml",
     ".html", ".css", ".scss", ".sql", ".sh", ".bat", ".ps1", ".toml", ".ini", ".cfg",
@@ -71,6 +73,21 @@ def _path_matches_globs(
     ):
         return False
     return True
+
+
+def _preview_line(line: str, *, start_index: int, end_index: int) -> str:
+    """Truncate a long line around the match so WS frames stay small."""
+    if len(line) <= _MAX_LINE_PREVIEW_CHARS:
+        return line
+    match_mid = (start_index + end_index) // 2
+    half = _MAX_LINE_PREVIEW_CHARS // 2
+    start = max(0, match_mid - half)
+    end = min(len(line), start + _MAX_LINE_PREVIEW_CHARS)
+    start = max(0, end - _MAX_LINE_PREVIEW_CHARS)
+    snippet = line[start:end]
+    prefix = "…" if start > 0 else ""
+    suffix = "…" if end < len(line) else ""
+    return f"{prefix}{snippet}{suffix}"
 
 
 def _looks_textual(path: Path) -> bool:
@@ -137,26 +154,29 @@ def stream_ide_search(
         except OSError:
             continue
 
-        file_matches: list[dict] = []
+        display_path = str(path)
+        asset = _asset_name(path)
+        file_match_count = 0
         for line_no, line in enumerate(text.splitlines(), start=1):
             for start_index, end_index in _line_matches(
                 line,
                 automaton,
                 match_case=match_case,
             ):
-                file_matches.append(
-                    {
-                        "line": line_no,
-                        "start_index": start_index,
-                        "end_index": end_index,
-                        "text": line,
-                    }
-                )
-
-        if file_matches:
-            display_path = str(path)
-            yield {
-                "path": display_path,
-                "asset": _asset_name(path),
-                "matches": file_matches,
-            }
+                if file_match_count >= _MAX_MATCHES_PER_FILE:
+                    break
+                file_match_count += 1
+                yield {
+                    "path": display_path,
+                    "asset": asset,
+                    "line": line_no,
+                    "start_index": start_index,
+                    "end_index": end_index,
+                    "text": _preview_line(
+                        line,
+                        start_index=start_index,
+                        end_index=end_index,
+                    ),
+                }
+            if file_match_count >= _MAX_MATCHES_PER_FILE:
+                break

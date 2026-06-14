@@ -1,4 +1,4 @@
-"""WebSocket consumers: watchdog, ide_search (Aho-Corasick), git."""
+"""WebSocket consumers: watchdog, ide_search (Aho-Corasick), getbypath, git."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from django.conf import settings
 
 from core.models import Workspace
 from gitapp.runner import get_git_runner
+from ide.file_service import file_meta, resolve_workspace_file, stream_workspace_file
 from ide.search_service import stream_ide_search
 from ide.watchdog_service import exposed_watchdog
 
@@ -161,6 +162,134 @@ class IdeSearchConsumer(AsyncWebsocketConsumer):
         except Exception as exc:
             _debug("ide_search", f"search_failed workspace_id={workspace.id} error={exc!r}")
             await self.send_json({"type": "error", "code": "search_failed", "message": str(exc)})
+
+    async def _get_workspace(self, workspace_id):
+        from channels.db import database_sync_to_async
+
+        @database_sync_to_async
+        def _fetch():
+            try:
+                return Workspace.objects.get(
+                    id=int(workspace_id),
+                    device_id=self.device.id,
+                    is_active=True,
+                )
+            except (Workspace.DoesNotExist, TypeError, ValueError):
+                return None
+
+        return await _fetch()
+
+    async def send_json(self, content):
+        await self.send(text_data=json.dumps(content))
+
+
+class GetByPathConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        if not self.scope.get("ws_authenticated") or self.scope.get("device") is None:
+            _debug("getbypath", "connect rejected (unauthenticated)")
+            await self.close(code=4401)
+            return
+        self.device = self.scope["device"]
+        self._read_task: asyncio.Task | None = None
+        await self.accept()
+        _debug("getbypath", f"connected device_id={self.device.id}")
+
+    async def disconnect(self, close_code):
+        _debug("getbypath", f"disconnected close_code={close_code}")
+        if self._read_task is not None:
+            self._read_task.cancel()
+
+    async def receive(self, text_data=None, bytes_data=None):
+        if text_data is None:
+            return
+        _debug("getbypath", f"receive raw={text_data!r}")
+        try:
+            content = json.loads(text_data)
+        except json.JSONDecodeError:
+            _debug("getbypath", "invalid JSON")
+            await self.send_json({"type": "error", "code": "invalid_json", "message": "Invalid JSON"})
+            return
+
+        msg_type = content.get("type")
+        if msg_type == "cancel":
+            _debug("getbypath", "cancel requested")
+            if self._read_task is not None:
+                self._read_task.cancel()
+            await self.send_json({"type": "cancelled"})
+            return
+
+        if msg_type != "get":
+            _debug("getbypath", f"invalid type={msg_type!r}")
+            await self.send_json({"type": "error", "code": "invalid_type", "message": "Expected type get"})
+            return
+
+        workspace_id = content.get("workspace_id")
+        file_path = content.get("path") or ""
+        if workspace_id is None:
+            await self.send_json({"type": "error", "code": "workspace_required", "message": "workspace_id required"})
+            return
+        if not str(file_path).strip():
+            await self.send_json({"type": "error", "code": "path_required", "message": "path required"})
+            return
+
+        workspace = await self._get_workspace(workspace_id)
+        if workspace is None:
+            await self.send_json({"type": "error", "code": "workspace_not_found", "message": "Workspace not found"})
+            return
+
+        if self._read_task is not None and not self._read_task.done():
+            self._read_task.cancel()
+
+        self._read_task = asyncio.create_task(self._run_get(workspace, file_path))
+
+    async def _run_get(self, workspace, file_path: str):
+        root = Path(workspace.absolute_path)
+        resolved = resolve_workspace_file(root, file_path)
+        if resolved is None:
+            _debug("getbypath", f"file_not_found workspace_id={workspace.id} path={file_path!r}")
+            await self.send_json({"type": "error", "code": "file_not_found", "message": "File not found in workspace"})
+            return
+
+        try:
+            meta = await asyncio.to_thread(file_meta, resolved)
+        except OSError as exc:
+            await self.send_json({"type": "error", "code": "read_failed", "message": str(exc)})
+            return
+
+        await self.send_json({"type": "file_started", "workspace_id": workspace.id, **meta})
+
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+
+        def worker():
+            try:
+                for chunk in stream_workspace_file(resolved):
+                    loop.call_soon_threadsafe(queue.put_nowait, chunk)
+            except Exception as exc:
+                loop.call_soon_threadsafe(queue.put_nowait, exc)
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+        chunk_count = 0
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                if isinstance(item, Exception):
+                    raise item
+                chunk_count += 1
+                await self.send_json({"type": "chunk", **item})
+            _debug("getbypath", f"file_complete workspace_id={workspace.id} chunks={chunk_count}")
+            await self.send_json({"type": "file_complete"})
+        except asyncio.CancelledError:
+            _debug("getbypath", f"file_cancelled workspace_id={workspace.id} chunks={chunk_count}")
+            await self.send_json({"type": "cancelled"})
+        except Exception as exc:
+            _debug("getbypath", f"file_failed workspace_id={workspace.id} error={exc!r}")
+            await self.send_json({"type": "error", "code": "read_failed", "message": str(exc)})
 
     async def _get_workspace(self, workspace_id):
         from channels.db import database_sync_to_async

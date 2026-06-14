@@ -1,4 +1,4 @@
-"""WebSocket tests for watchdog, ide_search, git."""
+"""WebSocket tests for watchdog, ide_search, getbypath, git."""
 
 import pytest
 from channels.testing.websocket import WebsocketCommunicator
@@ -51,9 +51,64 @@ async def test_ide_search_ws(api_key, registered_device, device_hash, workspace,
             break
         if msg["type"] == "result":
             saw_result = True
-            assert "matches" in msg
             assert msg["asset"]
+            assert "line" in msg
+            assert "text" in msg
     assert saw_result
+    await communicator.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_getbypath_ws(api_key, registered_device, device_hash, workspace, exposed_root):
+    sample = exposed_root / "sample.txt"
+    sample.write_text("line one\nline two\n", encoding="utf-8")
+    url = _ws_url("getbypath/", api_key, device_hash, workspace.id)
+    communicator = WebsocketCommunicator(application, url)
+    connected, _ = await communicator.connect()
+    assert connected
+
+    await communicator.send_json_to(
+        {
+            "type": "get",
+            "workspace_id": workspace.id,
+            "path": str(sample),
+        }
+    )
+    started = await communicator.receive_json_from()
+    assert started["type"] == "file_started"
+    assert started["asset"] == "sample.txt"
+    assert started["is_text"] is True
+
+    content = ""
+    while True:
+        msg = await communicator.receive_json_from()
+        if msg["type"] == "file_complete":
+            break
+        if msg["type"] == "chunk":
+            content += msg["content"]
+    assert "line one" in content
+    await communicator.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_getbypath_rejects_missing_file(api_key, registered_device, device_hash, workspace):
+    url = _ws_url("getbypath/", api_key, device_hash, workspace.id)
+    communicator = WebsocketCommunicator(application, url)
+    connected, _ = await communicator.connect()
+    assert connected
+
+    await communicator.send_json_to(
+        {
+            "type": "get",
+            "workspace_id": workspace.id,
+            "path": "missing-file.txt",
+        }
+    )
+    msg = await communicator.receive_json_from()
+    assert msg["type"] == "error"
+    assert msg["code"] == "file_not_found"
     await communicator.disconnect()
 
 
