@@ -23,7 +23,8 @@ def test_exposed_routes_tree(api_client, exposed_root):
     assert root["asset"]
     flat = flatten_tree(data)
     paths = {item["path"] for item in flat}
-    assert str(exposed_root / "alpha.txt") in paths
+    assert str(exposed_root / "sub") in paths
+    assert str(exposed_root / "alpha.txt") not in paths
 
 
 def test_workspace_open_creates(api_client, exposed_root):
@@ -47,10 +48,13 @@ def test_workspace_open_rejects_file(api_client, exposed_root):
 
 
 def test_workspace_tree(workspace_client, workspace, exposed_root):
+    sub = Path(workspace.absolute_path) / "pkg"
+    sub.mkdir()
     (Path(workspace.absolute_path) / "main.py").write_text("print()", encoding="utf-8")
     response = workspace_client.get(f"/api/workspaces/{workspace.id}/tree/")
     assert response.status_code == 200
     tree = response.json()
     assert tree["path_type"] == "folder"
     flat = flatten_tree([tree])
-    assert any(item["asset"] == "main.py" for item in flat)
+    assert any(item["asset"] == "pkg" for item in flat)
+    assert not any(item["asset"] == "main.py" for item in flat)

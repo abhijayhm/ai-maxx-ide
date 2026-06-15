@@ -8,14 +8,15 @@ App defaults (app/lib/core/config/app_config.dart):
   Server:  https://aimaxx.organisationapp.online
   API key: change-me-to-a-long-random-secret  (must match .env API_KEY)
 
-Tunnel must forward SERVER_DOMAIN -> http://127.0.0.1:8000
+Tunnel must forward SERVER_DOMAIN -> http://127.0.0.1:9000
 Health check: https://aimaxx.organisationapp.online/api/health/
+Set SERVER_PORT in .env (default 9000 if unset)
 
 
 --- One-time setup ---
 
 copy sample.env .env
-(edit .env: SERVER_DOMAIN, API_KEY, EXPOSED_DIRECTORIES_ABSOLUTE_PATHS, etc.)
+(edit .env: SERVER_DOMAIN, API_KEY, SERVER_PORT, EXPOSED_DIRECTORIES_ABSOLUTE_PATHS, etc.)
 
 cd server
 ..\env\Scripts\pip install -r requirements.txt
@@ -37,21 +38,18 @@ python manage.py migrate
 # Dev — ASGI (REST + WebSockets). daphne is first in INSTALLED_APPS, so runserver
 # serves config.asgi.application (HTTP + WS). Do NOT pass --noasgi.
 cd server
-python manage.py runserver 127.0.0.1:8000
-# Optional: raise Daphne WS frame limit if you stream very large single frames (default 1 MiB):
-# daphne --websocket-max-message-size=16777216 config.asgi:application -b 127.0.0.1 -p 8000
-# expect: "Starting ASGI/Daphne version ... development server at http://127.0.0.1:8000/"
+python manage.py runserver 127.0.0.1:9000
+# expect: "Starting ASGI/Daphne version ... development server at http://127.0.0.1:9000/"
 
-# Production / tunnel (alternative to runserver):
+# Packaged standalone (after build):
+cd server\standalone\dist\aimaxx-ide
+copy ..\..\..\..\.env .env
+aimaxx-ide.exe
+# Dashboard: http://127.0.0.1:9000/dashboard/
+
+# Build standalone exe:
 cd server
-..\env\Scripts\uvicorn.exe config.asgi:application --host 127.0.0.1 --port 8000
-
-# If WS returns 404 + "No supported WebSocket library detected", reinstall:
-..\env\Scripts\pip.exe install -r requirements.txt
-# (needs websockets + wsproto from uvicorn[standard]; restart uvicorn after)
-
-# Or from repo root with venv active:
-uvicorn config.asgi:application --host 127.0.0.1 --port 8000 --app-dir server
+standalone\build.bat
 
 # Tests
 cd server
@@ -70,7 +68,6 @@ C:\flutter\bin\flutter pub get
 C:\flutter\bin\flutter devices
 
 # Hot-reload dev run (replace DEVICE_ID, e.g. 6000cc2e)
-flutter run -d 5e649a2c
 C:\flutter\bin\flutter run -d 6000cc2e
 
 # Install debug build without keeping terminal attached (build + install)
@@ -85,47 +82,18 @@ C:\flutter\bin\flutter test
 
 cd app
 C:\flutter\bin\flutter pub get
-
-# Build release APK
 C:\flutter\bin\flutter build apk --release
-
-# Output file:
-#   app\build\app\outputs\flutter-apk\app-release.apk
-
-# Install release APK on connected phone
 adb install -r build\app\outputs\flutter-apk\app-release.apk
-
-# Or via Flutter (after build)
-C:\flutter\bin\flutter install -d DEVICE_ID --release
-
-# Smaller per-ABI APKs (optional)
-C:\flutter\bin\flutter build apk --release --split-per-abi
-#   app-arme64-v8a-release.apk  (most modern phones)
-#   adb install -r build\app\outputs\flutter-apk\app-arme64-v8a-release.apk
 
 
 --- Remote desktop (WebRTC) ---
 
 # Server must run on the Windows machine whose screen you want to share.
-# Installs aiortc + mss + av + pynput (see server/requirements.txt):
-cd server
-..\env\Scripts\pip install -r requirements.txt
-
 # .env flags (sample.env):
-#   REMOTE_INPUT_ENABLED=true   — allow trackpad/keyboard injection (pynput)
-#   REMOTE_WEBRTC_STUB=false    — set true only for tests / no capture hardware
+#   REMOTE_INPUT_ENABLED=true
+#   REMOTE_WEBRTC_STUB=false
 
-# Remote tab flow (Flutter):
-#   1) WS connect  wss://{SERVER_DOMAIN}/api/ws/remote/?api_key=…&device_hash=…
-#   2) Client sends WebRTC offer; server answers with desktop ScreenTrack (mss)
-#   3) flutter_webrtc renders video; trackpad/keyboard use input_batch frames
-
-# Flutter rebuild after adding flutter_webrtc:
-cd app
-C:\flutter\bin\flutter pub get
-C:\flutter\bin\flutter run -d DEVICE_ID
-
-# Verify remote WS + signaling (pytest uses REMOTE_WEBRTC_STUB=true):
+# Verify remote WS + signaling:
 cd server
 ..\env\Scripts\python.exe -m pytest tests/test_remote_ws.py -v
 
@@ -138,24 +106,27 @@ scripts\windows\setup_cloudflare_tunnel.bat
 # Reads repo .env:
 #   SERVER_DOMAIN=aimaxx.organisationapp.online
 #   TUNNEL_NAME=ai-maxx-ide
-#   BIND_PORT=8000
+#   SERVER_PORT=9000
 
-# 2) Start tunnel (separate terminal, after server is on 127.0.0.1:8000)
-cloudflared tunnel run ai-maxx-ide
-
-# Or background helper (starts tunnel if not connected)
+# 2) Start tunnel + server (or use dashboard buttons)
 scripts\windows\start_services.bat
 
-# 3) Full dev stack (3 terminals)
-#   Terminal A: uvicorn config.asgi:application --host 127.0.0.1 --port 8000  (in server/)
+# 3) Optional Windows schedulers (also on http://127.0.0.1:9000/dashboard/)
+scripts\windows\install_startup_task.bat
+scripts\windows\install_watchdog_task.bat
+scripts\windows\remove_schedulers.bat
+
+# 4) Full dev stack (3 terminals)
+#   Terminal A: python manage.py runserver 127.0.0.1:9000  (in server/)
 #   Terminal B: cloudflared tunnel run ai-maxx-ide
 #   Terminal C: flutter run -d DEVICE_ID  (in app/)
 
 
 --- Quick verify ---
 
+curl http://127.0.0.1:9000/api/health/
 curl https://aimaxx.organisationapp.online/api/health/
-# expect: {"ok":true}
+# expect: {"ok":true,...}
 
 cloudflared tunnel list
 # expect: ai-maxx-ide with CONNECTIONS

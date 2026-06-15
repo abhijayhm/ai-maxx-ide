@@ -33,7 +33,9 @@ def node_for_path(path: Path, *, max_depth: int | None = None, depth: int = 0) -
             for entry in entries:
                 if entry.is_symlink():
                     continue
-                if entry.is_dir() and entry.name in _SKIP_DIR_NAMES:
+                if not entry.is_dir():
+                    continue
+                if entry.name in _SKIP_DIR_NAMES:
                     continue
                 children.append(
                     node_for_path(entry, max_depth=max_depth, depth=depth + 1)

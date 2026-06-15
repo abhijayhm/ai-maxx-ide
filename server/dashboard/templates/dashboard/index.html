@@ -14,6 +14,7 @@
       --accent: #3b82f6;
       --accent-hover: #2563eb;
       --danger: #f87171;
+      --danger-hover: #ef4444;
       --ok: #4ade80;
       --border: #2a3648;
     }
@@ -31,6 +32,7 @@
       padding: 2rem 1.25rem 3rem;
     }
     h1 { margin: 0 0 0.25rem; font-size: 1.75rem; }
+    h2.section { margin: 1.5rem 0 0.75rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
     .sub { color: var(--muted); margin-bottom: 1.5rem; }
     .meta {
       display: grid;
@@ -65,6 +67,8 @@
       color: white;
     }
     button:hover { background: var(--accent-hover); }
+    button.danger { background: var(--danger); }
+    button.danger:hover { background: var(--danger-hover); }
     .error {
       border: 1px solid var(--danger);
       color: var(--danger);
@@ -95,21 +99,23 @@
 <body>
   <main>
     <h1>ai-maxx-ide server</h1>
-    <p class="sub">Local dashboard — run Windows maintenance scripts and check API health.</p>
+    <p class="sub">Local dashboard — tunnel, server, and Windows schedulers.</p>
 
     <div class="meta">
       <div>API health: <a href="/api/health/" target="_blank" rel="noopener">/api/health/</a></div>
-      <div>Listening: <code>{{ bind_host }}:{{ bind_port }}</code>{% if frozen %} (packaged){% endif %}</div>
+      <div>Listening: <code>{{ bind_host }}:{{ server_port }}</code>{% if frozen %} (packaged){% endif %}</div>
       <div>Config folder: <code>{{ app_root }}</code></div>
-      <div>Place <code>.env</code> next to the executable — synced on every start.</div>
+      <div>Set <code>SERVER_PORT</code> in <code>.env</code> (default <code>9000</code>).</div>
     </div>
 
     {% if error %}
     <div class="error">{{ error }}</div>
     {% endif %}
 
+    <h2 class="section">Tunnel &amp; server</h2>
     <div class="grid">
       {% for script in scripts %}
+      {% if script.section == "tunnel" %}
       <section class="card">
         <h2>{{ script.label }}</h2>
         <p>{{ script.description }}</p>
@@ -119,6 +125,26 @@
           <button type="submit">Run {{ script.file }}</button>
         </form>
       </section>
+      {% endif %}
+      {% endfor %}
+    </div>
+
+    <h2 class="section">Windows schedulers</h2>
+    <div class="grid">
+      {% for script in scripts %}
+      {% if script.section == "schedulers" %}
+      <section class="card">
+        <h2>{{ script.label }}</h2>
+        <p>{{ script.description }}</p>
+        <form method="post" action="{% url 'dashboard-run-form' %}">
+          {% csrf_token %}
+          <input type="hidden" name="script_id" value="{{ script.id }}">
+          <button type="submit"{% if script.close_dashboard %} class="danger"{% endif %}>
+            Run {{ script.file }}
+          </button>
+        </form>
+      </section>
+      {% endif %}
       {% endfor %}
     </div>
 

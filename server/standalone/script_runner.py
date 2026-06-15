@@ -15,16 +15,37 @@ from standalone.bootstrap import active_scripts_dir, repo_root
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_SCRIPTS: dict[str, dict[str, str]] = {
+ALLOWED_SCRIPTS: dict[str, dict[str, Any]] = {
     "setup_cloudflare_tunnel": {
         "label": "Setup Cloudflare tunnel",
         "file": "setup_cloudflare_tunnel.bat",
         "description": "Install/configure cloudflared for SERVER_DOMAIN (may need admin).",
+        "section": "tunnel",
     },
     "start_services": {
-        "label": "Start tunnel + services",
+        "label": "Start tunnel + server",
         "file": "start_services.bat",
-        "description": "Start cloudflared tunnel if not already connected.",
+        "description": "Start cloudflared (if needed) and the server on SERVER_PORT.",
+        "section": "tunnel",
+    },
+    "install_startup_task": {
+        "label": "Install startup scheduler",
+        "file": "install_startup_task.bat",
+        "description": "Run start_services.bat at Windows logon (may need admin).",
+        "section": "schedulers",
+    },
+    "install_watchdog_task": {
+        "label": "Install watchdog scheduler",
+        "file": "install_watchdog_task.bat",
+        "description": "Every minute, silently ensure tunnel and server are running; restart if down.",
+        "section": "schedulers",
+    },
+    "remove_schedulers": {
+        "label": "Shutdown & remove schedulers",
+        "file": "remove_schedulers.bat",
+        "description": "Stop aimaxx-ide.exe and delete startup/watchdog tasks.",
+        "section": "schedulers",
+        "close_dashboard": True,
     },
 }
 
@@ -57,11 +78,17 @@ _jobs: dict[str, ScriptJob] = {}
 _lock = threading.Lock()
 
 
-def list_scripts() -> list[dict[str, str]]:
-    return [
-        {"id": script_id, **meta}
-        for script_id, meta in ALLOWED_SCRIPTS.items()
-    ]
+def list_scripts() -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for script_id, meta in ALLOWED_SCRIPTS.items():
+        row = {"id": script_id, **meta}
+        items.append(row)
+    return items
+
+
+def script_closes_dashboard(script_id: str) -> bool:
+    meta = ALLOWED_SCRIPTS.get(script_id) or {}
+    return bool(meta.get("close_dashboard"))
 
 
 def _log_path(script_id: str) -> Path:
@@ -98,7 +125,10 @@ def start_script(script_id: str) -> ScriptJob:
 
     creationflags = 0
     if sys.platform == "win32":
-        creationflags = subprocess.CREATE_NEW_CONSOLE
+        if meta.get("close_dashboard"):
+            creationflags = subprocess.CREATE_NO_WINDOW
+        else:
+            creationflags = subprocess.CREATE_NEW_CONSOLE
 
     proc = subprocess.Popen(
         cmd,

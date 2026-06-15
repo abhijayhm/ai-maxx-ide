@@ -45,7 +45,7 @@ if not exist "%SCRIPT_DIR%..\..\.env" (
     echo No .env found. Copy sample.env to .env and set your domain:
     echo   copy "%SCRIPT_DIR%..\..\sample.env" "%SCRIPT_DIR%..\..\.env"
     echo.
-    echo Required: SERVER_DOMAIN, TUNNEL_NAME, BIND_PORT
+    echo Required: SERVER_DOMAIN, TUNNEL_NAME, SERVER_PORT
     pause
     exit /b 1
 )

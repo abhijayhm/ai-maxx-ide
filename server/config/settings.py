@@ -15,7 +15,8 @@ ensure_runtime()
 env = environ.Env(
     DEBUG=(bool, True),
     BIND_HOST=(str, "127.0.0.1"),
-    BIND_PORT=(int, 8000),
+    SERVER_PORT=(int, 9000),
+    BIND_PORT=(int, 9000),
     TERMINAL_IDLE_TTL=(int, 3600),
     REMOTE_INPUT_ENABLED=(bool, True),
     REMOTE_WEBRTC_STUB=(bool, False),
@@ -35,7 +36,8 @@ EXPOSED_DIRECTORIES_ABSOLUTE_PATHS = env.json(
     default=[],
 )
 BIND_HOST = env("BIND_HOST")
-BIND_PORT = env("BIND_PORT")
+SERVER_PORT = env.int("SERVER_PORT", default=env.int("BIND_PORT", default=9000))
+BIND_PORT = SERVER_PORT
 REDIS_URL = env("REDIS_URL", default="redis://127.0.0.1:6379/0")
 TERMINAL_IDLE_TTL = timedelta(seconds=env("TERMINAL_IDLE_TTL"))
 REMOTE_INPUT_ENABLED = env("REMOTE_INPUT_ENABLED")

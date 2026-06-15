@@ -1,4 +1,4 @@
-"""PyInstaller entry point: sync .env, migrate, serve ASGI on :8000."""
+"""PyInstaller entry point: sync .env, migrate, serve ASGI on SERVER_PORT (default 9000)."""
 
 from __future__ import annotations
 
@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="ai-maxx-ide standalone server")
     parser.add_argument("--host", default=None, help="Bind host (default from .env BIND_HOST)")
-    parser.add_argument("--port", type=int, default=None, help="Bind port (default from .env BIND_PORT)")
+    parser.add_argument("--port", type=int, default=None, help="Bind port (default from .env SERVER_PORT)")
     ns = parser.parse_args(args)
 
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     from django.conf import settings
 
     host = ns.host or settings.BIND_HOST
-    port = ns.port or settings.BIND_PORT
+    port = ns.port or settings.SERVER_PORT
     _run_server(host, port)
     return 0
 

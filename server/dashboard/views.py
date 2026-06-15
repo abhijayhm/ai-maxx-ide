@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import threading
+
 from django.conf import settings
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_GET, require_POST
@@ -11,7 +13,12 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from standalone.bootstrap import app_root, is_frozen, repo_root
-from standalone.script_runner import get_job, list_scripts, start_script
+from standalone.script_runner import (
+    get_job,
+    list_scripts,
+    script_closes_dashboard,
+    start_script,
+)
 
 
 def _is_local(request: HttpRequest) -> bool:
@@ -19,20 +26,23 @@ def _is_local(request: HttpRequest) -> bool:
     return addr in {"127.0.0.1", "::1"}
 
 
-@require_GET
-def dashboard_page(request: HttpRequest) -> HttpResponse:
-    if not _is_local(request):
-        return HttpResponse("Dashboard is only available on localhost.", status=403)
-
-    context = {
+def _dashboard_context(**extra):
+    return {
         "scripts": list_scripts(),
         "repo_root": str(repo_root()),
         "app_root": str(app_root()),
         "frozen": is_frozen(),
         "bind_host": settings.BIND_HOST,
-        "bind_port": settings.BIND_PORT,
+        "server_port": settings.SERVER_PORT,
+        **extra,
     }
-    return render(request, "dashboard/index.html", context)
+
+
+@require_GET
+def dashboard_page(request: HttpRequest) -> HttpResponse:
+    if not _is_local(request):
+        return HttpResponse("Dashboard is only available on localhost.", status=403)
+    return render(request, "dashboard/index.html", _dashboard_context())
 
 
 @csrf_protect
@@ -43,35 +53,31 @@ def dashboard_run_form(request: HttpRequest) -> HttpResponse:
 
     script_id = request.POST.get("script_id", "")
     try:
+        if script_closes_dashboard(script_id):
+            thread = threading.Thread(
+                target=start_script,
+                args=(script_id,),
+                daemon=True,
+            )
+            thread.start()
+            return render(
+                request,
+                "dashboard/goodbye.html",
+                {"server_port": settings.SERVER_PORT},
+            )
         job = start_script(script_id)
     except (ValueError, FileNotFoundError) as exc:
         return render(
             request,
             "dashboard/index.html",
-            {
-                "scripts": list_scripts(),
-                "repo_root": str(repo_root()),
-                "app_root": str(app_root()),
-                "frozen": is_frozen(),
-                "bind_host": settings.BIND_HOST,
-                "bind_port": settings.BIND_PORT,
-                "error": str(exc),
-            },
+            _dashboard_context(error=str(exc)),
             status=400,
         )
 
     return render(
         request,
         "dashboard/index.html",
-        {
-            "scripts": list_scripts(),
-            "repo_root": str(repo_root()),
-            "app_root": str(app_root()),
-            "frozen": is_frozen(),
-            "bind_host": settings.BIND_HOST,
-            "bind_port": settings.BIND_PORT,
-            "last_job": job.to_dict(),
-        },
+        _dashboard_context(last_job=job.to_dict()),
     )
 
 
@@ -102,7 +108,10 @@ def dashboard_run_view(request):
     except FileNotFoundError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
 
-    return Response(job.to_dict(), status=status.HTTP_202_ACCEPTED)
+    payload = job.to_dict()
+    if script_closes_dashboard(str(script_id)):
+        payload["close_dashboard"] = True
+    return Response(payload, status=status.HTTP_202_ACCEPTED)
 
 
 @api_view(["GET"])

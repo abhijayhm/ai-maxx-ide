@@ -92,7 +92,7 @@ def load_env() -> dict[str, str]:
         sample = sample_env_path()
         raise SystemExit(
             f"Missing {path}\n"
-            f"Copy {sample} to .env and set SERVER_DOMAIN, TUNNEL_NAME, BIND_PORT."
+            f"Copy {sample} to .env and set SERVER_DOMAIN, TUNNEL_NAME, SERVER_PORT."
         )
     return parse_env_file(path)
 
@@ -120,11 +120,13 @@ def require_env(env: dict[str, str], key: str) -> str:
 
 
 def server_port(env: dict[str, str]) -> int:
+    if env.get("SERVER_PORT", "").strip():
+        return env_int(env, "SERVER_PORT")
     if env.get("BIND_PORT", "").strip():
         return env_int(env, "BIND_PORT")
     if env.get("LOCAL_SERVER_PORT", "").strip():
         return env_int(env, "LOCAL_SERVER_PORT")
-    return 8000
+    return 9000
 
 
 def parse_extra_ingress(env: dict[str, str]) -> list[tuple[str, str]]:
