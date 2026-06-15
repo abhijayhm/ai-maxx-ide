@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
 import '../auth/auth_repository.dart';
+import '../background/workbench_foreground_service.dart';
 import '../config/app_config.dart';
 import '../db/app_database.dart';
 import '../device_identifier.dart';
@@ -10,6 +11,7 @@ import 'ide_file_provider.dart';
 import 'ide_search_provider.dart';
 import 'watchdog_provider.dart';
 import 'agent_session_provider.dart';
+import 'agent_provider.dart';
 import 'composer_settings_provider.dart';
 import 'global_loader_provider.dart';
 import 'terminals_provider.dart';
@@ -188,7 +190,9 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
     );
     final snapshot = await auth.logout();
     state = AsyncData(snapshot);
+    await WorkbenchForegroundService.stop();
     await ref.read(watchdogProvider.notifier).disconnect();
+    await ref.read(agentProvider.notifier).disconnect();
     await ref.read(terminalsProvider.notifier).disconnect();
     await ref.read(remoteProvider.notifier).disconnect();
     ref.read(globalLoaderProvider.notifier).reset();
@@ -241,8 +245,8 @@ class SessionNotifier extends AsyncNotifier<SessionSnapshot> {
           background: ref.read(ideIndexProvider).hasData,
         );
     if (snapshot.isReady) {
-      await ref.read(agentSessionsProvider.notifier).ensureDefaultSession();
       await ref.read(composerSettingsProvider.notifier).loadModels();
+      await ref.read(agentProvider.notifier).ensureConnected();
     }
   }
 }

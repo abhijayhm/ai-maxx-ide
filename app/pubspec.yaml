@@ -29,6 +29,7 @@ dependencies:
   highlight: ^0.7.0
   in_app_file_view: ^1.1.1
   markdown_widget: ^2.3.2+8
+  flutter_foreground_task: ^9.1.0
 
 dev_dependencies:
   flutter_test:

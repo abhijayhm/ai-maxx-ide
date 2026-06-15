@@ -64,6 +64,7 @@ class WsClient {
 
     try {
       final socket = await WebSocket.connect(uri.toString());
+      socket.pingInterval = const Duration(seconds: 25);
       _channel = IOWebSocketChannel(socket);
     } catch (error) {
       _channel = null;

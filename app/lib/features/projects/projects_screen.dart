@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/route_node.dart';
 import '../../core/providers/projects_browse_provider.dart';
 import '../../core/providers/agent_provider.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/providers/agent_session_provider.dart';
 import '../../core/providers/ide_file_provider.dart';
 import '../../core/providers/ide_index_provider.dart';
@@ -63,6 +64,14 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
+      }
+      final workspaceId =
+          ref.read(sessionProvider).valueOrNull?.activeWorkspaceId;
+      final parsedId = workspaceId == null ? null : int.tryParse(workspaceId);
+      if (parsedId != null) {
+        unawaited(
+          ref.read(agentSessionsProvider.notifier).loadForWorkspace(parsedId),
+        );
       }
       final browse = ref.read(projectsBrowseProvider);
       _searchController.text = browse.query;
@@ -142,7 +151,6 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
       onToggleExpanded: _toggleAgentExpanded,
       onSessionSelected: (id) {
         ref.read(agentSessionsProvider.notifier).selectSession(id);
-        ref.read(agentProvider.notifier).loadSessionMessages(id);
       },
       onNewSession: () =>
           ref.read(agentSessionsProvider.notifier).createSession(select: true),

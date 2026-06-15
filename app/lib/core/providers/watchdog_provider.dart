@@ -19,6 +19,7 @@ class WatchdogNotifier extends Notifier<WorkbenchWsStatus> {
 
   @override
   WorkbenchWsStatus build() {
+    ref.keepAlive();
     ref.onDispose(() => _disconnect(silent: true));
     ref.listen(sessionProvider, (previous, next) {
       final wasReady = previous?.valueOrNull?.isReady ?? false;
@@ -77,7 +78,16 @@ class WatchdogNotifier extends Notifier<WorkbenchWsStatus> {
     final type = frame['type'] as String? ?? '';
     if (type == 'connection_closed' || type == 'connection_error') {
       state = WorkbenchWsStatus.disconnected;
-      unawaited(_disconnect(silent: true));
+      final snapshot = ref.read(sessionProvider).valueOrNull;
+      if (snapshot?.isAuthenticated == true) {
+        Future<void>.delayed(const Duration(seconds: 2), () {
+          if (ref.read(sessionProvider).valueOrNull?.isAuthenticated == true) {
+            unawaited(connect());
+          }
+        });
+      } else {
+        unawaited(_disconnect(silent: true));
+      }
       return;
     }
 

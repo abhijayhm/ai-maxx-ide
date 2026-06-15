@@ -15,6 +15,17 @@ class AgentRepository {
         .toList();
   }
 
+  /// Workspace-scoped list; server creates a default session when none exist.
+  Future<List<AgentSessionInfo>> fetchWorkspaceSessions(int workspaceId) async {
+    final response = await _api.get<List<dynamic>>(
+      'workspaces/$workspaceId/agent/sessions/',
+    );
+    final data = response.data ?? [];
+    return data
+        .map((item) => AgentSessionInfo.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<AgentSessionInfo> createSession() async {
     final response = await _api.post<Map<String, dynamic>>('agent/sessions/');
     return AgentSessionInfo.fromJson(response.data!);

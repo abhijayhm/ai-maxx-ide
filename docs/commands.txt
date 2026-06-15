@@ -41,6 +41,12 @@ cd server
 python manage.py runserver 127.0.0.1:9000
 # expect: "Starting ASGI/Daphne version ... development server at http://127.0.0.1:9000/"
 
+# Stop whatever is bound to port 9000 (PowerShell — run from any directory)
+Get-NetTCPConnection -LocalPort 9000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+
+# One-liner (copy/paste)
+# powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 9000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"
+
 # Packaged standalone (after build):
 cd server\standalone\dist\aimaxx-ide
 copy ..\..\..\..\.env .env

@@ -79,6 +79,28 @@ async def test_agent_ws_auth_frame(
 
 
 @pytest.mark.django_db
+def test_workspace_agent_sessions_bootstrap(workspace_client, workspace, registered_device):
+    resp = workspace_client.get(f"/api/workspaces/{workspace.id}/agent/sessions/")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert "id" in body[0]
+    assert AgentSession.objects.filter(workspace=workspace).count() == 1
+
+    resp2 = workspace_client.get(f"/api/workspaces/{workspace.id}/agent/sessions/")
+    assert resp2.status_code == 200
+    assert len(resp2.json()) == 1
+    assert resp2.json()[0]["id"] == body[0]["id"]
+
+
+@pytest.mark.django_db
+def test_workspace_agent_sessions_workspace_mismatch(workspace_client, workspace):
+    other = workspace.id + 9999
+    resp = workspace_client.get(f"/api/workspaces/{other}/agent/sessions/")
+    assert resp.status_code == 403
+
+
+@pytest.mark.django_db
 def test_agent_sessions_list_and_create(workspace_client, workspace, registered_device):
     resp = workspace_client.get("/api/agent/sessions/")
     assert resp.status_code == 200

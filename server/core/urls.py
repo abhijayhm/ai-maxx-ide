@@ -1,5 +1,6 @@
 from django.urls import include, path
 
+from agents import views as agent_views
 from core import views as core_views
 from ide import views as ide_views
 
@@ -21,6 +22,11 @@ urlpatterns = [
         "workspaces/<int:workspace_id>/tree/",
         ide_views.workspace_tree_view,
         name="workspace-tree",
+    ),
+    path(
+        "workspaces/<int:workspace_id>/agent/sessions/",
+        agent_views.workspace_agent_sessions_view,
+        name="workspace-agent-sessions",
     ),
     path("", include("agents.urls")),
     path("", include("terminals.urls")),

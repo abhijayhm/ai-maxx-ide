@@ -18,6 +18,9 @@ class AppDatabase {
 
   static const lastWorkspacePathKey = 'last_workspace_path';
 
+  static String activeAgentSessionKey(int workspaceId) =>
+      'active_agent_session_$workspaceId';
+
   static Future<AppDatabase> open() async {
     if (_instance != null) {
       return _instance!;

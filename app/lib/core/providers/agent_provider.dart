@@ -57,7 +57,7 @@ class AgentNotifier extends Notifier<AgentState> {
 
   @override
   AgentState build() {
-    ref.onDispose(_disconnect);
+    ref.keepAlive();
     ref.listen(
       agentSessionsProvider.select((s) => s.activeId),
       (previous, next) {
@@ -144,6 +144,13 @@ class AgentNotifier extends Notifier<AgentState> {
     }
   }
 
+  /// Connect agent WS when session is ready (idempotent).
+  Future<void> ensureConnected() => _ensureConnected();
+
+  Future<void> disconnect() async {
+    await _disconnect();
+  }
+
   Future<void> _ensureConnected() async {
     if (_client != null && _client!.isConnected) {
       return;
@@ -167,6 +174,16 @@ class AgentNotifier extends Notifier<AgentState> {
   }
 
   void _onEvent(AgentEvent event) {
+    if (event.type == AgentEventType.error) {
+      final frameType = event.raw['type'] as String? ?? '';
+      if (frameType == 'connection_closed' ||
+          frameType == 'connection_error') {
+        state = state.copyWith(running: false, clearRunningSession: true);
+        _scheduleReconnect();
+        return;
+      }
+    }
+
     final sessionId = ref.read(agentSessionsProvider).activeId;
     if (sessionId == null) {
       return;
@@ -233,6 +250,27 @@ class AgentNotifier extends Notifier<AgentState> {
       return false;
     }
     return message['type'] == 'assistant';
+  }
+
+  void _scheduleReconnect() {
+    final session = ref.read(sessionProvider).valueOrNull;
+    if (session?.isReady != true) {
+      return;
+    }
+    Future<void>.delayed(const Duration(seconds: 2), () async {
+      if (ref.read(sessionProvider).valueOrNull?.isReady != true) {
+        return;
+      }
+      if (_client?.isConnected == true) {
+        return;
+      }
+      try {
+        await _disconnect();
+        await _ensureConnected();
+      } catch (_) {
+        // Retry on next resume or user action.
+      }
+    });
   }
 
   Future<void> _disconnect() async {

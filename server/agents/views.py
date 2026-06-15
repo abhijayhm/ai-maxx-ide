@@ -22,6 +22,36 @@ def _run_async(coro):
     async_to_sync(wrapper)()
 
 
+@api_view(["GET"])
+@authentication_classes([DeviceAPIKeyAuthentication])
+@permission_classes([IsRegisteredDevice, RequiresWorkspace])
+def workspace_agent_sessions_view(request, workspace_id):
+    """List agent sessions for a workspace; create one if none exist."""
+    workspace = get_workspace_from_request(request)
+    if workspace.id != workspace_id:
+        return error_response("workspace_mismatch", "Workspace mismatch.", status.HTTP_403_FORBIDDEN)
+
+    device = request.user
+    sessions = list(
+        AgentSession.objects.filter(workspace=workspace, device=device).order_by(
+            "-updated_at", "-created_at"
+        )
+    )
+    if not sessions:
+        session = AgentSession.objects.create(workspace=workspace, device=device)
+        try:
+            _run_async(ensure_session_agent(workspace, session, None))
+        except Exception as exc:
+            session.delete()
+            return error_response(
+                "agent_bridge_failed",
+                str(exc),
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        sessions = [session]
+    return Response(AgentSessionSerializer(sessions, many=True).data)
+
+
 @api_view(["GET", "POST"])
 @authentication_classes([DeviceAPIKeyAuthentication])
 @permission_classes([IsRegisteredDevice, RequiresWorkspace])

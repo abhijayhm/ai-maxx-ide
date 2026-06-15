@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/background/workbench_session_host.dart';
 import '../core/providers/global_loader_provider.dart';
 import 'workbench_loader_overlay.dart';
 
@@ -14,12 +15,14 @@ class GlobalLoaderHost extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final message = ref.watch(globalLoaderProvider);
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        child,
-        if (message != null) WorkbenchLoaderOverlay(message: message),
-      ],
+    return WorkbenchSessionHost(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          child,
+          if (message != null) WorkbenchLoaderOverlay(message: message),
+        ],
+      ),
     );
   }
 }
