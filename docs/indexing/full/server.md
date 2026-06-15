@@ -12,7 +12,7 @@ python manage.py runserver 8000
 uvicorn config.asgi:application --host 127.0.0.1 --port 8000
 ```
 
-Cloudflare tunnel (`cloudflared tunnel run ai-maxx-ide`) maps `aimaxx.organisationapp.online` → `127.0.0.1:8000`.
+Cloudflare tunnel (`cloudflared tunnel run ai-maxx-ide`) maps `aimaxx.example.com` → `127.0.0.1:8000`.
 
 ## WebSocket routes (`config/routing.py`)
 

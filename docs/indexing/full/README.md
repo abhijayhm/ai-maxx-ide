@@ -12,7 +12,7 @@ This folder documents how the mobile workbench, Django server, workspace indexin
 ## Architecture (one screen)
 
 ```
-┌─────────────────────┐         wss://aimaxx.organisationapp.online
+┌─────────────────────┐         wss://aimaxx.example.com
 │  Flutter app        │◄──────────────────────────────────────────────┐
 │  (Android/iOS)      │         https://.../api/ (REST: auth, files)   │
 │                     │         wss://.../ws/sync/{id}/ (indexing)     │

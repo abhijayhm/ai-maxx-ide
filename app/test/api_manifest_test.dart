@@ -37,7 +37,7 @@ void main() {
       },
     );
     expect(uri.scheme, 'wss');
-    expect(uri.host, 'aimaxx.organisationapp.online');
+    expect(uri.host, 'aimaxx.example.com');
     expect(uri.port, 443);
     expect(uri.path, '/api/ws/watchdog/');
     expect(uri.toString(), isNot(contains(':0/')));

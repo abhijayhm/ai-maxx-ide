@@ -137,7 +137,7 @@ For driver commands: read `get_widget_tree` first — use real `ByText`, `BySema
 Not replace Mobile/Dart MCP — run in parallel when symptom is network:
 
 ```powershell
-curl https://aimaxx.organisationapp.online/api/health/
+curl https://aimaxx.example.com/api/health/
 cd server; python -m pytest tests/test_sync_ws.py tests/test_agents_ws.py -q
 ```
 

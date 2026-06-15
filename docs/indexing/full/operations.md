@@ -5,7 +5,7 @@ Day-to-day commands for server, tunnel, Flutter app, and Docker Android emulator
 ## Environment (`.env`)
 
 ```
-SERVER_DOMAIN=aimaxx.organisationapp.online
+SERVER_DOMAIN=aimaxx.example.com
 API_KEY=…
 BIND_PORT=8000
 ```
@@ -23,9 +23,9 @@ uvicorn config.asgi:application --host 127.0.0.1 --port 8000
 cloudflared tunnel run ai-maxx-ide
 ```
 
-Public URL: `https://aimaxx.organisationapp.online`
+Public URL: `https://aimaxx.example.com`
 
-WebSocket sync: `wss://aimaxx.organisationapp.online/ws/sync/{workspace_id}/`
+WebSocket sync: `wss://aimaxx.example.com/ws/sync/{workspace_id}/`
 
 ## Flutter app
 
@@ -75,7 +75,7 @@ pytest tests/test_sync_ws.py tests/test_files.py tests/test_devices_workspaces.p
 
 | Symptom | Fix |
 |---------|-----|
-| 404 on wrong hostname | Use `aimaxx.organisationapp.online`, not `aimaxxssh…` |
+| 404 on wrong hostname | Use `aimaxx.example.com`, not `aimaxxssh…` |
 | WS fails, REST works | Run `uvicorn`, not `runserver` |
 | Workspace spinner stuck | Fixed: session refresh deadlock — ensure latest `app_providers.dart` |
 | Sync timeout | Large workspace: wait for batched `files` frames; check server logs |

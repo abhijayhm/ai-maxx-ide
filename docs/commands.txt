@@ -5,11 +5,11 @@ Python venv: env\Scripts\activate
 Flutter SDK: C:\flutter\bin  (add to PATH)
 
 App defaults (app/lib/core/config/app_config.dart):
-  Server:  https://aimaxx.organisationapp.online
+  Server:  https://aimaxx.example.com
   API key: change-me-to-a-long-random-secret  (must match .env API_KEY)
 
 Tunnel must forward SERVER_DOMAIN -> http://127.0.0.1:9000
-Health check: https://aimaxx.organisationapp.online/api/health/
+Health check: https://aimaxx.example.com/api/health/
 Set SERVER_PORT in .env (default 9000 if unset)
 
 
@@ -104,7 +104,7 @@ cd server
 scripts\windows\setup_cloudflare_tunnel.bat
 
 # Reads repo .env:
-#   SERVER_DOMAIN=aimaxx.organisationapp.online
+#   SERVER_DOMAIN=aimaxx.example.com
 #   TUNNEL_NAME=ai-maxx-ide
 #   SERVER_PORT=9000
 
@@ -125,7 +125,7 @@ scripts\windows\remove_schedulers.bat
 --- Quick verify ---
 
 curl http://127.0.0.1:9000/api/health/
-curl https://aimaxx.organisationapp.online/api/health/
+curl https://aimaxx.example.com/api/health/
 # expect: {"ok":true,...}
 
 cloudflared tunnel list

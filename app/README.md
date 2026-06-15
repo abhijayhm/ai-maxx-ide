@@ -31,11 +31,11 @@ Example: `flutter run -d 6000cc2e`
 The backend must be running locally and exposed through the Cloudflare tunnel:
 
 1. Start Django on `127.0.0.1:8000` (see repo root `sample.env` / `.env`).
-2. Run the Cloudflare tunnel so `https://aimaxx.organisationapp.online` forwards to the local server.
+2. Run the Cloudflare tunnel so `https://aimaxx.example.com` forwards to the local server.
 
 Default client settings (overridable in the authenticate modal):
 
-- Server: `https://aimaxx.organisationapp.online`
+- Server: `https://aimaxx.example.com`
 - API key: `change-me-to-a-long-random-secret` (matches repo `.env` `API_KEY`)
 
 ## Analyze

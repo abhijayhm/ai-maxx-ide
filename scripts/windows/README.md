@@ -16,7 +16,7 @@ Edit `.env`:
 
 | Key | Example |
 | --- | --- |
-| `SERVER_DOMAIN` | `aimaxx.organisationapp.online` |
+| `SERVER_DOMAIN` | `aimaxx.example.com` |
 | `TUNNEL_NAME` | `ai-maxx-ide` |
 | `BIND_PORT` | `8000` |
 

@@ -6,7 +6,7 @@
 |------|-------|
 | Flutter root | `app/` |
 | Android package | `com.aimaxx.ai_maxx_ide` |
-| Server URL (default) | `https://aimaxx.organisationapp.online` |
+| Server URL (default) | `https://aimaxx.example.com` |
 | API key (must match `.env`) | `change-me-to-a-long-random-secret` |
 | WS base | `wss://{host}/api/ws/` |
 | Commands doc | `docs/commands.txt` |

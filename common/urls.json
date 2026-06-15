@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "server_url": "https://aimaxx.organisationapp.online",
+  "server_url": "https://aimaxx.example.com",
   "api_base_path": "/api/",
   "ws_base_path": "/api/ws/",
   "auth": {

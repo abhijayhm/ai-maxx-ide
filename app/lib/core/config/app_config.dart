@@ -1,7 +1,7 @@
 /// Baked-in defaults for the mobile client.
 class AppConfig {
   static const String defaultServerUrl =
-      'https://aimaxx.organisationapp.online';
+      'https://aimaxx.example.com';
   static const String defaultApiKey = '';
 
   AppConfig({
@@ -15,7 +15,7 @@ class AppConfig {
 
   String get apiBaseUrl => '${_trimTrailingSlash(serverUrl)}/api/';
 
-  /// e.g. `wss://aimaxx.organisationapp.online/api/ws/`
+  /// e.g. `wss://aimaxx.example.com/api/ws/`
   String get webSocketBaseUrl => webSocketUri('').toString();
 
   /// Build a WebSocket [Uri] without string concat (avoids `:0` port bugs).

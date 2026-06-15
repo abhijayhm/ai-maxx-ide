@@ -322,7 +322,7 @@ The Flutter client ships with baked-in development defaults in `app/lib/core/con
 
 | Setting | Value |
 | --- | --- |
-| `SERVER_DOMAIN` | `https://aimaxx.organisationapp.online` |
+| `SERVER_DOMAIN` | `https://aimaxx.example.com` |
 | `API_KEY` | `change-me-to-a-long-random-secret` (matches repo root `.env` / `sample.env`) |
 
-The API key can be overridden in the authenticate modal. WebSocket URLs are derived from the server URL (`wss://aimaxx.organisationapp.online/ws/` for the default host).
+The API key can be overridden in the authenticate modal. WebSocket URLs are derived from the server URL (`wss://aimaxx.example.com/ws/` for the default host).

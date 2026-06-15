@@ -159,7 +159,7 @@ class _AuthModalSheetState extends ConsumerState<_AuthModalSheet> {
             autocorrect: false,
             decoration: const InputDecoration(
               labelText: 'Server URL',
-              hintText: 'https://aimaxx.organisationapp.online',
+              hintText: 'https://aimaxx.example.com',
             ),
           ),
           const SizedBox(height: 12),

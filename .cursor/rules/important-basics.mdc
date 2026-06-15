@@ -61,7 +61,7 @@ Unauthenticated WS → close `4401`. Wrong workspace → `4403`/`4404`.
 - **uvicorn** is an optional production alternative: `uvicorn config.asgi:application --host 127.0.0.1 --port 8000`.
 - Requires `websockets` / `wsproto` when using uvicorn (`pip install -r server/requirements.txt`).
 - HTTP middleware skips `/api/ws/*`; WS auth is query-string only (`core/ws_auth.py`).
-- Public access via Cloudflare tunnel → `SERVER_DOMAIN` (default `aimaxx.organisationapp.online`).
+- Public access via Cloudflare tunnel → `SERVER_DOMAIN` (default `aimaxx.example.com`).
 
 ## Workspace sync
 
@@ -72,7 +72,7 @@ Unauthenticated WS → close `4401`. Wrong workspace → `4403`/`4404`.
 
 ## Defaults
 
-- Server URL: `https://aimaxx.organisationapp.online`
+- Server URL: `https://aimaxx.example.com`
 - API key: must match server `.env` `API_KEY` (app default is placeholder `change-me-to-a-long-random-secret`)
 
 When adding a new WS endpoint: update `server/config/routing.py`, add test under `server/tests/test_*_ws.py`, and extend `AppConfig` / `WsClient` — keep paths under `/api/ws/`.

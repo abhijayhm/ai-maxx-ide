@@ -102,9 +102,9 @@ Search runs entirely on-device after sync.
 ## Config defaults (`app_config.dart`)
 
 ```dart
-defaultServerUrl = 'https://aimaxx.organisationapp.online'
-webSocketBaseUrl → wss://aimaxx.organisationapp.online/ws/
-apiBaseUrl       → https://aimaxx.organisationapp.online/api/
+defaultServerUrl = 'https://aimaxx.example.com'
+webSocketBaseUrl → wss://aimaxx.example.com/ws/
+apiBaseUrl       → https://aimaxx.example.com/api/
 ```
 
 ## Dependencies (`pubspec.yaml`)
