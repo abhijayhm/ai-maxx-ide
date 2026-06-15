@@ -140,8 +140,10 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
       running: agent.running && agent.runningSessionId == activeSessionId,
       expanded: expanded,
       onToggleExpanded: _toggleAgentExpanded,
-      onSessionSelected: (id) =>
-          ref.read(agentSessionsProvider.notifier).selectSession(id),
+      onSessionSelected: (id) {
+        ref.read(agentSessionsProvider.notifier).selectSession(id);
+        ref.read(agentProvider.notifier).loadSessionMessages(id);
+      },
       onNewSession: () =>
           ref.read(agentSessionsProvider.notifier).createSession(select: true),
     );

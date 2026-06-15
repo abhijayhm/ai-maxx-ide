@@ -7,6 +7,7 @@ import '../../core/models/route_node.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/providers/global_loader_provider.dart';
 import '../../core/providers/ide_index_provider.dart';
+import '../../core/providers/lazy_route_tree_provider.dart';
 import '../../theme/workbench_colors.dart';
 import '../../theme/workbench_theme.dart';
 import '../onboarding/auth_modal.dart';
@@ -248,7 +249,7 @@ String _indexStatusText(IdeIndexState index, bool authenticated) {
     return 'Showing cached tree';
   }
   if (index.hasData) {
-    return '${index.exposedFlat.length} exposed paths';
+    return '${index.exposedTree.length} exposed root${index.exposedTree.length == 1 ? '' : 's'}';
   }
   if (authenticated) {
     return 'No exposed folders found on server.';
@@ -256,7 +257,7 @@ String _indexStatusText(IdeIndexState index, bool authenticated) {
   return 'Authenticate to load folders.';
 }
 
-class _RouteTreeTile extends StatefulWidget {
+class _RouteTreeTile extends ConsumerStatefulWidget {
   const _RouteTreeTile({
     required this.node,
     required this.depth,
@@ -270,20 +271,52 @@ class _RouteTreeTile extends StatefulWidget {
   final ValueChanged<String> onSelect;
 
   @override
-  State<_RouteTreeTile> createState() => _RouteTreeTileState();
+  ConsumerState<_RouteTreeTile> createState() => _RouteTreeTileState();
 }
 
-class _RouteTreeTileState extends State<_RouteTreeTile> {
+class _RouteTreeTileState extends ConsumerState<_RouteTreeTile> {
   bool _expanded = false;
 
-  List<RouteNode> get _folderChildren =>
-      widget.node.children.where((c) => c.isFolder).toList();
+  Future<void> _toggleExpanded() async {
+    if (!widget.node.isFolder) {
+      return;
+    }
+    final next = !_expanded;
+    setState(() => _expanded = next);
+    if (!next) {
+      return;
+    }
+    final lazy = ref.read(lazyRouteTreeProvider);
+    if (lazy.hasLoaded(widget.node.path)) {
+      return;
+    }
+    final handle =
+        ref.read(globalLoaderProvider.notifier).acquire('Loading folder…');
+    try {
+      await ref.read(lazyRouteTreeProvider.notifier).loadExposedChildren(
+            widget.node.path,
+            fallback: widget.node.children,
+          );
+    } catch (_) {
+      if (mounted) {
+        setState(() => _expanded = false);
+      }
+    } finally {
+      handle.release();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.workbenchColors;
     final selected = widget.selectedPath == widget.node.path;
-    final hasChildren = _folderChildren.isNotEmpty;
+    final lazy = ref.watch(lazyRouteTreeProvider);
+    final isFolder = widget.node.isFolder;
+    final children = isFolder
+        ? lazy.childrenFor(widget.node.path, fallback: widget.node.children)
+        : const <RouteNode>[];
+    final canExpand =
+        isFolder && (children.isNotEmpty || !lazy.hasLoaded(widget.node.path));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -292,33 +325,37 @@ class _RouteTreeTileState extends State<_RouteTreeTile> {
           dense: true,
           contentPadding: EdgeInsets.only(left: 8.0 + widget.depth * 16),
           leading: Icon(
-            hasChildren
+            isFolder
                 ? (_expanded
                     ? Icons.folder_open_outlined
                     : Icons.folder_outlined)
-                : Icons.folder_outlined,
+                : Icons.insert_drive_file_outlined,
             size: 18,
-            color: colors.aiEditedFileFg,
+            color: isFolder ? colors.aiEditedFileFg : colors.fgMuted,
           ),
           title: Text(
             widget.node.asset,
             style: workbenchMonoStyle(context, size: 13),
           ),
-          trailing: hasChildren
+          trailing: canExpand
               ? IconButton(
                   icon: Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     size: 18,
                     color: colors.fgMuted,
                   ),
-                  onPressed: () => setState(() => _expanded = !_expanded),
+                  onPressed: _toggleExpanded,
                 )
               : null,
           selected: selected,
-          onTap: () => widget.onSelect(widget.node.path),
+          onTap: () {
+            if (isFolder) {
+              widget.onSelect(widget.node.path);
+            }
+          },
         ),
         if (_expanded)
-          for (final child in _folderChildren)
+          for (final child in children)
             _RouteTreeTile(
               node: child,
               depth: widget.depth + 1,

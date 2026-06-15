@@ -7,6 +7,7 @@ import '../models/route_node.dart';
 import '../repositories/ide_repository.dart';
 import 'app_providers.dart';
 import 'global_loader_provider.dart';
+import 'lazy_route_tree_provider.dart';
 
 final ideRepositoryProvider = FutureProvider<IdeRepository>((ref) async {
   final api = ref.watch(apiClientProvider);
@@ -208,7 +209,7 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
     try {
       final repo = await ref.read(ideRepositoryProvider.future);
       final roots = await repo.fetchExposedRoutesTree();
-      final flat = flattenRouteTree(roots);
+      final flat = roots;
       final keepCached = background &&
           roots.isEmpty &&
           state.exposedFlat.isNotEmpty;
@@ -225,6 +226,7 @@ class IdeIndexNotifier extends Notifier<IdeIndexState> {
           refreshing: false,
           loadedFromCache: false,
         );
+        ref.read(lazyRouteTreeProvider.notifier).clear();
         final db = await ref.read(appDatabaseProvider.future);
         await db.saveRouteCache(
           cacheKey: AppDatabase.cacheKeyExposed,

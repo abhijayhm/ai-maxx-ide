@@ -1,6 +1,7 @@
 ' Run a program with no visible console (for scheduled tasks / watchdog restarts).
+' Paths are under %REPO_ROOT%\scripts\windows\ (dev repo or packaged dist).
 ' Usage:
-'   wscript.exe _run_hidden.vbs "C:\path\program.exe" [arg1 [arg2 ...]]
+'   wscript.exe "%REPO_ROOT%\scripts\windows\_run_hidden.vbs" "C:\path\program.exe" [arg1 [arg2 ...]]
 If WScript.Arguments.Count < 1 Then WScript.Quit 1
 cmd = """" & WScript.Arguments(0) & """"
 If WScript.Arguments.Count > 1 Then

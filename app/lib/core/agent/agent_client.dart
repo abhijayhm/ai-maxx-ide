@@ -135,6 +135,14 @@ class AgentEvent {
       }
       return AgentEvent(type: AgentEventType.stream, raw: const {}, text: text);
     }
+    final text = payload['text'] as String? ?? _extractAssistantText(payload);
+    if (text != null && text.isNotEmpty) {
+      return AgentEvent(
+        type: AgentEventType.stream,
+        raw: {'message': payload},
+        text: text,
+      );
+    }
     return fromFrame({'type': 'stream', 'message': payload});
   }
 

@@ -22,18 +22,27 @@ def _paths_equal(a: Path, b: Path) -> bool:
 
 def is_under_exposed_roots(path: Path) -> bool:
     """Return True if resolved path is under any exposed root."""
+    return is_under_root(path, *get_exposed_roots())
+
+
+def is_under_root(path: Path, *roots: Path) -> bool:
+    """Return True if resolved path is any root or under one of them."""
     try:
         resolved = path.resolve()
     except (OSError, ValueError):
         return False
-    for root in get_exposed_roots():
+    for root in roots:
         try:
-            resolved.relative_to(root)
+            root_resolved = root.resolve()
+        except (OSError, ValueError):
+            continue
+        try:
+            resolved.relative_to(root_resolved)
             return True
         except ValueError:
             if os.name == "nt":
                 resolved_str = str(resolved).lower()
-                root_str = str(root).lower()
+                root_str = str(root_resolved).lower()
                 if resolved_str == root_str or resolved_str.startswith(root_str + os.sep):
                     return True
     return False

@@ -100,25 +100,15 @@ class _WorkspaceTreeBrowserState extends ConsumerState<WorkspaceTreeBrowser> {
           child: ListView(
             padding: const EdgeInsets.all(8),
             children: [
-              if (root.children.isEmpty)
+              for (final child in root.children)
                 _TreeTile(
-                  node: root,
+                  node: child,
                   depth: 0,
                   selectedPath: _selectedPath,
                   expandedPaths: explorer.expandedPaths,
                   onLongPress: _selectPath,
                   onOpenFile: widget.onOpenFile,
-                )
-              else
-                for (final child in root.children)
-                  _TreeTile(
-                    node: child,
-                    depth: 0,
-                    selectedPath: _selectedPath,
-                    expandedPaths: explorer.expandedPaths,
-                    onLongPress: _selectPath,
-                    onOpenFile: widget.onOpenFile,
-                  ),
+                ),
             ],
           ),
         ),

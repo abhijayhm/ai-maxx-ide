@@ -30,7 +30,7 @@ class AgentRepository {
 
   Future<List<StoredAgentMessage>> fetchMessages(
     int sessionId, {
-    int limit = 100,
+    int limit = 500,
     int offset = 0,
   }) async {
     final response = await _api.get<List<dynamic>>(

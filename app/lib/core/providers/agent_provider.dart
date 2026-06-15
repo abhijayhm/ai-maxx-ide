@@ -61,12 +61,20 @@ class AgentNotifier extends Notifier<AgentState> {
     ref.listen(
       agentSessionsProvider.select((s) => s.activeId),
       (previous, next) {
-        if (next != null && next != previous) {
-          Future.microtask(() => loadSessionMessages(next));
+        if (next != null) {
+          unawaited(loadSessionMessages(next));
         }
       },
     );
+    Future.microtask(_loadActiveSessionHistory);
     return const AgentState();
+  }
+
+  Future<void> _loadActiveSessionHistory() async {
+    final sessionId = ref.read(agentSessionsProvider).activeId;
+    if (sessionId != null) {
+      await loadSessionMessages(sessionId);
+    }
   }
 
   Future<void> send(String text) async {

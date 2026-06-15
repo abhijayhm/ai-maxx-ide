@@ -19,10 +19,10 @@ if not defined CF (
     goto :server
 )
 
-call "%~dp0ensure_tunnel_running.bat"
+call "%SCRIPTS_WIN%\ensure_tunnel_running.bat"
 
 :server
-call "%~dp0ensure_server_running.bat"
+call "%SCRIPTS_WIN%\ensure_server_running.bat"
 echo.
 echo Health: http://127.0.0.1:%SERVER_PORT%/api/health/
 echo Dashboard: http://127.0.0.1:%SERVER_PORT%/dashboard/

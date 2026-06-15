@@ -12,13 +12,26 @@ from core.models import Workspace
 from core.permissions import IsRegisteredDevice, RequiresWorkspace, get_workspace_from_request
 from core.utils.paths import PathNotAllowedError, resolve_allowed_path
 
-from ide.route_tree import build_exposed_routes_tree, build_workspace_tree
+from ide.route_tree import build_exposed_routes_tree, build_workspace_tree, list_directory_nodes
 
 
 @api_view(["GET"])
 @authentication_classes([DeviceAPIKeyAuthentication])
 @permission_classes([IsRegisteredDevice])
 def exposed_routes_tree_view(request):
+    path_param = (request.query_params.get("path") or "").strip()
+    if path_param:
+        try:
+            abs_path = resolve_allowed_path(path_param)
+        except PathNotAllowedError as exc:
+            return error_response("path_not_allowed", exc.detail, status.HTTP_403_FORBIDDEN)
+        if not abs_path.is_dir():
+            return error_response(
+                "not_a_directory",
+                "Path must be an existing folder.",
+                status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(list_directory_nodes(abs_path))
     return Response(build_exposed_routes_tree())
 
 
@@ -70,9 +83,10 @@ def workspace_tree_view(request, workspace_id):
     if workspace.id != workspace_id:
         return error_response("workspace_mismatch", "Workspace mismatch.", status.HTTP_403_FORBIDDEN)
 
-    root = Path(workspace.absolute_path)
+    workspace_root = Path(workspace.absolute_path).resolve()
+
     try:
-        tree = build_workspace_tree(root)
+        tree = build_workspace_tree(workspace_root)
     except NotADirectoryError:
         return error_response(
             "not_a_directory",

@@ -27,7 +27,7 @@ if defined SILENT (
 if defined SERVER_EXE (
     if not defined SILENT echo [watchdog] Launching %SERVER_EXE%
     if defined SILENT (
-        wscript.exe "%~dp0_run_hidden.vbs" "%SERVER_EXE%"
+        wscript.exe "%SCRIPTS_WIN%\_run_hidden.vbs" "%SERVER_EXE%"
     ) else (
         start "ai-maxx-ide server" /MIN "%SERVER_EXE%"
     )
@@ -52,7 +52,7 @@ if defined SILENT (
     > "%DEV_BAT%" echo @echo off
     >>"%DEV_BAT%" echo cd /d "%REPO_ROOT%\server"
     >>"%DEV_BAT%" echo %PY% manage.py runserver 127.0.0.1:%SERVER_PORT%
-    wscript.exe "%~dp0_run_hidden.vbs" "%DEV_BAT%"
+    wscript.exe "%SCRIPTS_WIN%\_run_hidden.vbs" "%DEV_BAT%"
 ) else (
     start "ai-maxx-ide server" /MIN cmd /c "cd /d \"%REPO_ROOT%\server\" && %PY% manage.py runserver 127.0.0.1:%SERVER_PORT%"
 )

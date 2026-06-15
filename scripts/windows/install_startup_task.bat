@@ -6,7 +6,7 @@ rem Register logon task: start tunnel + server (may prompt for admin).
 call "%~dp0_load_env.bat"
 
 set "TASK_NAME=ai-maxx-ide-startup"
-set "RUN_CMD=%REPO_ROOT%\scripts\windows\start_services.bat"
+set "RUN_CMD=%SCRIPTS_WIN%\start_services.bat"
 
 net session >nul 2>&1
 if errorlevel 1 (

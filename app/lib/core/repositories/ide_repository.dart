@@ -14,6 +14,17 @@ class IdeRepository {
         .toList();
   }
 
+  Future<List<RouteNode>> fetchExposedChildren(String folderPath) async {
+    final response = await _api.get<List<dynamic>>(
+      'exposed_routes_tree/',
+      queryParameters: {'path': folderPath},
+    );
+    final data = response.data ?? [];
+    return data
+        .map((item) => RouteNode.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<({int id, String path})> openWorkspace(String folderPath) async {
     final response = await _api.post<Map<String, dynamic>>(
       'workspaces/',

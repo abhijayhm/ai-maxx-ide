@@ -21,7 +21,7 @@ AI Maxx IDE takes a different approach: instead of exposing the machine, it expo
 | **Tunnel** | [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/) — internet exposure without open ports |
 | **Packaging** | Windows EXE + batch launcher, no Python install required |
 
-**License:** [MIT](./LICENSE) · **Copyright:** Vadsoft Private Limited
+**License:** [MIT](./LICENSE) · **Copyright:** Abhijay
 
 ---
 

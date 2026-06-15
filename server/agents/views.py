@@ -67,7 +67,7 @@ def agent_messages_view(request):
     session_id = request.query_params.get("session_id")
     if session_id is not None:
         qs = qs.filter(agent_session_id=int(session_id))
-    qs = qs.order_by("timestamp")
+    qs = qs.order_by("timestamp", "id")
     limit = int(request.query_params.get("limit", 50))
     offset = int(request.query_params.get("offset", 0))
     messages = qs[offset : offset + limit]

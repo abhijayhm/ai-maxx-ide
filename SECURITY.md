@@ -8,7 +8,7 @@ Security fixes are applied on the default branch (`main`). There are no long-ter
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
-Report security issues privately by opening a [GitHub Security Advisory](https://github.com/abhijayhm/ai-maxx-ide/security/advisories/new) (preferred) or by contacting the maintainers through your organization's usual security channel if you already work with Vadsoft Private Limited.
+Report security issues privately by opening a [GitHub Security Advisory](https://github.com/abhijayhm/ai-maxx-ide/security/advisories/new) (preferred) or by contacting the maintainers through your organization's usual security channel if you already work with Abhijay
 
 Include:
 

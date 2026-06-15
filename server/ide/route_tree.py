@@ -17,8 +17,47 @@ def _asset_name(path: Path) -> str:
     return str(path).rstrip("\\/").split(os.sep)[-1] or str(path)
 
 
+def list_directory_nodes(directory: Path) -> list[dict]:
+    """Immediate children of a directory (files and folders; children always empty)."""
+    if not directory.is_dir():
+        return []
+    try:
+        entries = sorted(
+            directory.iterdir(),
+            key=lambda p: (not p.is_dir(), p.name.lower()),
+        )
+    except (OSError, PermissionError):
+        return []
+    nodes: list[dict] = []
+    for entry in entries:
+        if entry.is_symlink():
+            continue
+        if entry.is_dir() and entry.name in _SKIP_DIR_NAMES:
+            continue
+        asset = _asset_name(entry)
+        if entry.is_dir():
+            nodes.append(
+                {
+                    "path": str(entry),
+                    "asset": asset,
+                    "path_type": "folder",
+                    "children": [],
+                }
+            )
+        else:
+            nodes.append(
+                {
+                    "path": str(entry),
+                    "asset": asset,
+                    "path_type": "file",
+                    "children": [],
+                }
+            )
+    return nodes
+
+
 def node_for_path(path: Path, *, max_depth: int | None = None, depth: int = 0) -> dict:
-    """Build a single route tree node (recursive for directories)."""
+    """Build a recursive route tree node (files and folders)."""
     asset = _asset_name(path)
     if path.is_dir():
         children: list[dict] = []
@@ -33,9 +72,7 @@ def node_for_path(path: Path, *, max_depth: int | None = None, depth: int = 0) -
             for entry in entries:
                 if entry.is_symlink():
                     continue
-                if not entry.is_dir():
-                    continue
-                if entry.name in _SKIP_DIR_NAMES:
+                if entry.is_dir() and entry.name in _SKIP_DIR_NAMES:
                     continue
                 children.append(
                     node_for_path(entry, max_depth=max_depth, depth=depth + 1)
@@ -56,11 +93,22 @@ def node_for_path(path: Path, *, max_depth: int | None = None, depth: int = 0) -
 
 
 def build_exposed_routes_tree() -> list[dict]:
-    """One tree node per configured exposed root."""
-    return [node_for_path(root) for root in get_exposed_roots()]
+    """One folder node per configured exposed root (children loaded lazily)."""
+    nodes: list[dict] = []
+    for root in get_exposed_roots():
+        nodes.append(
+            {
+                "path": str(root),
+                "asset": _asset_name(root),
+                "path_type": "folder",
+                "children": [],
+            }
+        )
+    return nodes
 
 
 def build_workspace_tree(workspace_root: Path) -> dict:
+    """Full workspace tree (all files and folders, recursive)."""
     root = workspace_root.resolve()
     if not root.is_dir():
         raise NotADirectoryError(str(root))

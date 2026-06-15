@@ -128,6 +128,47 @@ def test_agent_messages_http(workspace_client, workspace, registered_device, age
 
 
 @pytest.mark.django_db
+def test_agent_messages_ordered_oldest_first(
+    workspace_client, workspace, registered_device, agent_session
+):
+    from core.models import AgentMessage, Sender
+
+    AgentMessage.objects.create(
+        device=registered_device,
+        workspace=workspace,
+        agent_session=agent_session,
+        sender=Sender.USER,
+        receiver=Sender.SYSTEM,
+        run_id="r1",
+        payload={"text": "first"},
+    )
+    AgentMessage.objects.create(
+        device=registered_device,
+        workspace=workspace,
+        agent_session=agent_session,
+        sender=Sender.SYSTEM,
+        receiver=Sender.USER,
+        run_id="r1",
+        payload={"type": "assistant", "text": "second"},
+    )
+    AgentMessage.objects.create(
+        device=registered_device,
+        workspace=workspace,
+        agent_session=agent_session,
+        sender=Sender.USER,
+        receiver=Sender.SYSTEM,
+        run_id="r2",
+        payload={"text": "third"},
+    )
+    resp = workspace_client.get(
+        f"/api/agent/messages/?session_id={agent_session.id}"
+    )
+    assert resp.status_code == 200
+    texts = [row["payload"].get("text") for row in resp.json()]
+    assert texts == ["first", "second", "third"]
+
+
+@pytest.mark.django_db
 def test_agent_models(workspace_client):
     resp = workspace_client.get("/api/agent/models/")
     assert resp.status_code == 200
